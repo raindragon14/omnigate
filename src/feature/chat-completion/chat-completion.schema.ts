@@ -26,4 +26,7 @@ export const chatCompletionRequestSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   top_p: z.number().min(0).max(1).optional(),
   stream: z.boolean().optional(),
+  tools: z.array(z.unknown()).optional(),
+  tool_choice: z.unknown().optional(),
+  response_format: z.unknown().optional(),
 });

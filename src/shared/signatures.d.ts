@@ -11,6 +11,8 @@ export declare const DEFAULT_PORT: 8787;
 export declare const HTTP_STATUS_OK: 200;
 /** HTTP 400 Bad Request. */
 export declare const HTTP_STATUS_BAD_REQUEST: 400;
+/** HTTP 429 Too Many Requests. */
+export declare const HTTP_STATUS_TOO_MANY_REQUESTS: 429;
 /** HTTP 404 Not Found. */
 export declare const HTTP_STATUS_NOT_FOUND: 404;
 /** HTTP 500 Internal Server Error. */
@@ -143,6 +145,9 @@ export declare function createAppError(code: string, message: string, statusCode
 // Sprint 2 — Chat Completions
 // ---------------------------------------------------------------------------
 
+/** Routing mode that influences provider scoring. */
+export type RoutingMode = "balanced" | "quality" | "speed" | "survival";
+
 /** A single message in an OpenAI-compatible chat conversation. */
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
@@ -160,6 +165,9 @@ export type OpenAIChatRequest = {
   temperature?: number | undefined;
   top_p?: number | undefined;
   stream?: boolean | undefined;
+  tools?: unknown[] | undefined;
+  tool_choice?: unknown | undefined;
+  response_format?: unknown | undefined;
 };
 
 /** Normalised internal representation of a chat completion request. */
@@ -170,6 +178,17 @@ export type RouterRequest = {
   temperature?: number | undefined;
   topP?: number | undefined;
   stream: boolean;
+  tools?: unknown[] | undefined;
+  toolChoice?: unknown | undefined;
+  responseFormat?: unknown | undefined;
+  mode: RoutingMode;
+};
+
+/** Rate-limit configuration for a single provider. */
+export type ProviderRateLimit = {
+  rpm?: number | undefined;
+  rph?: number | undefined;
+  rpd?: number | undefined;
 };
 
 /** A single provider entry from the registry, ready for selection and routing. */
@@ -182,6 +201,11 @@ export type ProviderCandidate = {
   enabled: boolean;
   paidFallback: boolean;
   apiKeyEnv: string;
+  context: number;
+  supportsTools: boolean;
+  supportsJson: boolean;
+  supportsStreaming: boolean;
+  rateLimit: ProviderRateLimit;
 };
 
 /** Configuration for a single model alias in the provider registry. */
@@ -207,6 +231,8 @@ export type ProviderRequest = {
 export type ProviderResponse = {
   status: number;
   body: Record<string, unknown>;
+  headers: Record<string, string>;
+  isMalformed?: boolean | undefined;
 };
 
 /** A standard OpenAI-compatible chat completion response. */
@@ -300,20 +326,20 @@ export type ChatCompletionErrorResponse = {
 /** A chat completion response that is either a successful OpenAI response or an error shape. */
 export type ChatCompletionResponse = OpenAIChatCompletionResponse | ChatCompletionErrorResponse;
 
-/**
- * Routes a chat completion request through the best available provider.
- * Orchestrates request normalisation, provider selection, API key resolution,
- * adapter dispatch, and response handling.
- * @param chatRequest  The validated OpenAI-compatible chat request.
- * @returns The provider's response shaped as an OpenAIChatCompletionResponse.
- * @throws {RoutingError} When no provider is available, API keys are missing,
- *   or the upstream provider returns a non-200 status.
- */
-export declare function routeChatCompletion(chatRequest: OpenAIChatRequest): Promise<OpenAIChatCompletionResponse>;
-
 // ---------------------------------------------------------------------------
 // Routing & selection
 // ---------------------------------------------------------------------------
+
+/** Error categories returned by adapters and classified by the router. */
+export type ProviderErrorCategory =
+  | "provider_rate_limited"
+  | "provider_timeout"
+  | "provider_server_error"
+  | "provider_auth_error"
+  | "provider_malformed_response"
+  | "provider_network_error"
+  | "no_provider_available"
+  | "invalid_request";
 
 /**
  * Custom error with a machine-readable code that the controller uses to
@@ -322,23 +348,110 @@ export declare function routeChatCompletion(chatRequest: OpenAIChatRequest): Pro
  * @param message Human-readable error description.
  */
 export declare class RoutingError extends Error {
-  readonly code: string;
-  constructor(code: string, message: string);
+  readonly code: ProviderErrorCategory;
+  constructor(code: ProviderErrorCategory, message: string);
+}
+
+/** Input for selecting eligible provider candidates. */
+export type ProviderSelectionInput = {
+  request: RouterRequest;
+  providers: ProviderCandidate[];
+  aliases: Record<string, AliasConfig>;
+  cooldownStore: ProviderCooldownStore;
+  resolveApiKey: (apiKeyEnv: string) => string | undefined;
+  nowMs: number;
+};
+
+/**
+ * Filters and returns eligible provider candidates for the given request.
+ * Rejects disabled providers, missing API keys, paid fallback unless allowed,
+ * providers in cooldown, and providers missing required features.
+ * @param input  Selection parameters.
+ * @returns An array of eligible ProviderCandidate values (empty when none match).
+ */
+export declare function selectProviderCandidates(input: ProviderSelectionInput): ProviderCandidate[];
+
+/** Score for a single provider candidate. */
+export type ProviderScore = {
+  providerId: string;
+  score: number;
+};
+
+/**
+ * Computes a numeric score for a single provider candidate based on priority,
+ * mode, and feature match.
+ * @param request   The normalised router request.
+ * @param provider  The provider candidate to score.
+ * @returns A ProviderScore with providerId and score.
+ */
+export declare function scoreProvider(request: RouterRequest, provider: ProviderCandidate): ProviderScore;
+
+/**
+ * Ranks provider candidates by descending score, stable for equal scores.
+ * @param request    The normalised router request.
+ * @param providers  The list of eligible candidates.
+ * @returns The candidates sorted from highest to lowest score.
+ */
+export declare function rankProviderCandidates(
+  request: RouterRequest,
+  providers: ProviderCandidate[],
+): ProviderCandidate[];
+
+/** In-memory cooldown store for tracking provider 429 cooldowns. */
+export interface ProviderCooldownStore {
+  /** Returns the cooldown timestamp (ms) for a provider, or undefined if not cooling down. */
+  getCooldownUntil(providerId: string): number | undefined;
+  /** Sets a cooldown expiration timestamp (ms) for a provider. */
+  setCooldown(providerId: string, cooldownUntilMs: number): void;
+  /** Returns true when the provider is still cooling down at the given time. */
+  isProviderCoolingDown(providerId: string, nowMs: number): boolean;
 }
 
 /**
- * Finds the best (highest priority) enabled provider that matches the given
- * model alias.
- * @param modelAlias  The model alias string (e.g. "omnigate/deepseek-v4-flash-auto").
- * @param providers   The list of provider candidates to search.
- * @param aliases     Alias configuration mapping alias names to family lists.
- * @returns The best matching ProviderCandidate, or undefined when no match exists.
+ * Creates an in-memory cooldown store backed by a Map.
+ * @returns A ProviderCooldownStore instance.
  */
-export declare function selectBestProvider(
-  modelAlias: string,
-  providers: ProviderCandidate[],
-  aliases: Record<string, AliasConfig>,
-): ProviderCandidate | undefined;
+export declare function createProviderCooldownStore(): ProviderCooldownStore;
+
+/**
+ * Parses a Retry-After header value into milliseconds from now.
+ * Handles both seconds and HTTP-date formats.
+ * @param rawHeader  The raw Retry-After header value, or undefined.
+ * @param nowMs      Current time in milliseconds.
+ * @returns Milliseconds from now to wait, or undefined when unparseable.
+ */
+export declare function parseRetryAfterMs(rawHeader: string | undefined, nowMs: number): number | undefined;
+
+/** Input for running the fallback loop. */
+export type FallbackRunnerInput = {
+  request: RouterRequest;
+  providers: ProviderCandidate[];
+  adapter: ProviderAdapter;
+  resolveApiKey: (apiKeyEnv: string) => string | undefined;
+  cooldownStore: ProviderCooldownStore;
+  nowMs: () => number;
+};
+
+/**
+ * Routes the request through the ranked provider list, attempting fallback
+ * on rate-limited, timeout, server-error, network-error, and malformed-response
+ * failures.  On rate-limit, sets cooldown.
+ * @param input  Fallback runner parameters.
+ * @returns The first successful OpenAI-compatible response.
+ * @throws {RoutingError} When all providers fail.
+ */
+export declare function runProviderFallback(input: FallbackRunnerInput): Promise<OpenAIChatCompletionResponse>;
+
+/**
+ * Classifies a provider HTTP response or error into a ProviderErrorCategory.
+ * @param response  The provider response (may be undefined for network/timeout errors).
+ * @param error     The caught error, if any.
+ * @returns The classified error category.
+ */
+export declare function classifyProviderError(
+  response: ProviderResponse | undefined,
+  error: unknown,
+): ProviderErrorCategory;
 
 // ---------------------------------------------------------------------------
 // HTTP controllers

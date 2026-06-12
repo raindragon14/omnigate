@@ -25,20 +25,34 @@ function isSupported(): boolean {
 }
 
 function buildProviderRequest(request: RouterRequest, provider: ProviderCandidate, apiKey: string): ProviderRequest {
+  const body: Record<string, unknown> = {
+    model: provider.model,
+    messages: request.messages,
+    max_tokens: request.maxTokens,
+    temperature: request.temperature,
+    top_p: request.topP,
+    stream: request.stream,
+  };
+
+  if (request.tools !== undefined) {
+    body.tools = request.tools;
+  }
+
+  if (request.toolChoice !== undefined) {
+    body.tool_choice = request.toolChoice;
+  }
+
+  if (request.responseFormat !== undefined) {
+    body.response_format = request.responseFormat;
+  }
+
   return {
     url: `${provider.baseUrl}${CHAT_COMPLETIONS_PATH}`,
     headers: {
       "Content-Type": CONTENT_TYPE_JSON,
       Authorization: `Bearer ${apiKey}`,
     },
-    body: {
-      model: provider.model,
-      messages: request.messages,
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-      top_p: request.topP,
-      stream: request.stream,
-    },
+    body,
   };
 }
 
@@ -47,18 +61,48 @@ async function sendProviderRequest(providerRequest: ProviderRequest): Promise<Pr
   const timeoutId = setTimeout(() => abortController.abort(), DEFAULT_TIMEOUT_MS);
 
   try {
-    const response = await fetch(providerRequest.url, {
-      method: "POST",
-      headers: providerRequest.headers,
-      body: JSON.stringify(providerRequest.body),
-      signal: abortController.signal,
-    });
+    const response = await fetchProviderResponse(providerRequest, abortController);
 
-    return {
-      status: response.status,
-      body: await response.json() as Record<string, unknown>,
-    };
+    return await toProviderResponse(response);
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+function fetchProviderResponse(providerRequest: ProviderRequest, abortController: AbortController): Promise<Response> {
+  return fetch(providerRequest.url, {
+    method: "POST",
+    headers: providerRequest.headers,
+    body: JSON.stringify(providerRequest.body),
+    signal: abortController.signal,
+  });
+}
+
+async function toProviderResponse(response: Response): Promise<ProviderResponse> {
+  const parseResult = await parseResponseBody(response);
+
+  return {
+    status: response.status,
+    body: parseResult.body,
+    headers: collectResponseHeaders(response),
+    isMalformed: parseResult.isMalformed,
+  };
+}
+
+function collectResponseHeaders(response: Response): Record<string, string> {
+  const headers: Record<string, string> = {};
+
+  response.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+
+  return headers;
+}
+
+async function parseResponseBody(response: Response): Promise<{ body: Record<string, unknown>; isMalformed: boolean }> {
+  try {
+    return { body: await response.json() as Record<string, unknown>, isMalformed: false };
+  } catch {
+    return { body: {}, isMalformed: true };
   }
 }

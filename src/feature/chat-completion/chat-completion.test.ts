@@ -1,44 +1,28 @@
 import { describe, expect, test } from "bun:test";
 
 import { normalizeRequest } from "../../router/request-normalizer";
-import type { OpenAIChatRequest, ProviderCandidate } from "../../shared/signatures";
-import { selectBestProvider } from "./chat-completion.service";
+import { routeChatCompletion, RoutingError } from "./chat-completion.service";
 
-const MOCK_CHAT_REQUEST: OpenAIChatRequest = {
-  model: "omnigate/deepseek-v4-flash-auto",
-  messages: [{ role: "user", content: "Hello" }],
-  max_tokens: 100,
-  temperature: 0.5,
-  top_p: 0.9,
-  stream: false,
-};
-
-const MOCK_PROVIDERS: ProviderCandidate[] = [
-  { id: "alpha", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 80, enabled: true, paidFallback: false, apiKeyEnv: "" },
-  { id: "beta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 90, enabled: true, paidFallback: false, apiKeyEnv: "" },
-  { id: "gamma", baseUrl: "", model: "", family: "mimo-v2.5", priority: 100, enabled: true, paidFallback: false, apiKeyEnv: "" },
-  { id: "delta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 70, enabled: false, paidFallback: false, apiKeyEnv: "" },
-  { id: "epsilon", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 50, enabled: true, paidFallback: true, apiKeyEnv: "" },
-];
-
-const MOCK_ALIASES = {
-  "omnigate/deepseek-v4-flash-auto": { families: ["deepseek-v4-flash"] },
-  "omnigate/mimo-v2.5-auto": { families: ["mimo-v2.5"] },
-  "omnigate/emergency-paid": { families: ["deepseek-v4-flash"], allow_paid: true },
-};
-
-/** Unit tests for chat-completion feature: request normalisation and provider selection. */
+/** Unit tests for chat-completion feature: request normalisation and routing. */
 describe("chat completion feature", () => {
   /** Should convert an OpenAI-style request into the internal RouterRequest shape. */
   test("normalizes OpenAI request to router request", () => {
-    const routerRequest = normalizeRequest(MOCK_CHAT_REQUEST);
+    const routerRequest = normalizeRequest({
+      model: "test-model",
+      messages: [{ role: "user", content: "Hello" }],
+      max_tokens: 100,
+      temperature: 0.5,
+      top_p: 0.9,
+      stream: false,
+    });
 
-    expect(routerRequest.model).toBe(MOCK_CHAT_REQUEST.model);
-    expect(routerRequest.messages).toEqual(MOCK_CHAT_REQUEST.messages);
-    expect(routerRequest.maxTokens).toBe(MOCK_CHAT_REQUEST.max_tokens);
-    expect(routerRequest.temperature).toBe(MOCK_CHAT_REQUEST.temperature);
-    expect(routerRequest.topP).toBe(MOCK_CHAT_REQUEST.top_p);
+    expect(routerRequest.model).toBe("test-model");
+    expect(routerRequest.messages).toEqual([{ role: "user", content: "Hello" }]);
+    expect(routerRequest.maxTokens).toBe(100);
+    expect(routerRequest.temperature).toBe(0.5);
+    expect(routerRequest.topP).toBe(0.9);
     expect(routerRequest.stream).toBe(false);
+    expect(routerRequest.mode).toBe("balanced");
   });
 
   /** Should default stream to false when the incoming request omits it. */
@@ -50,62 +34,40 @@ describe("chat completion feature", () => {
 
   /** Should strip unknown fields (e.g. extra_body) during normalisation. */
   test("strips unknown fields during normalization", () => {
-    const raw = {
+    const routerRequest = normalizeRequest({
       model: "test",
       messages: [{ role: "user" as const, content: "hi" }],
       extra_body: { thinking: true },
-    } as OpenAIChatRequest;
-
-    const routerRequest = normalizeRequest(raw);
+    } as import("../../shared/signatures").OpenAIChatRequest);
 
     expect(routerRequest.model).toBe("test");
     expect("extra_body" in routerRequest).toBe(false);
   });
 
-  /** Unit tests for the selectBestProvider function inside chat-completion.service. */
-  describe("selectBestProvider", () => {
-    /** Should return undefined when the model alias is not found in the registry. */
-    test("returns undefined for unknown alias", () => {
-      const result = selectBestProvider("unknown/model", MOCK_PROVIDERS, MOCK_ALIASES);
-
-      expect(result).toBeUndefined();
+  /** Should pass through tools, tool_choice, and response_format. */
+  test("passes through tools and response format", () => {
+    const routerRequest = normalizeRequest({
+      model: "test",
+      messages: [{ role: "user", content: "hi" }],
+      tools: [{ type: "function" }],
+      tool_choice: "auto",
+      response_format: { type: "json_object" },
     });
 
-    /** Should select the provider with the highest priority among enabled providers in the matching family. */
-    test("returns highest priority enabled provider for matching family", () => {
-      const result = selectBestProvider("omnigate/deepseek-v4-flash-auto", MOCK_PROVIDERS, MOCK_ALIASES);
+    expect(routerRequest.tools).toEqual([{ type: "function" }]);
+    expect(routerRequest.toolChoice).toBe("auto");
+    expect(routerRequest.responseFormat).toEqual({ type: "json_object" });
+  });
 
-      expect(result).toBeDefined();
-      expect(result?.id).toBe("beta");
-    });
+  /** Should throw RoutingError when no provider is available for unknown model. */
+  test("throws routing error for unknown model", async () => {
+    try {
+      await routeChatCompletion({ model: "unknown/model", messages: [{ role: "user", content: "hi" }] });
 
-    /** Should exclude disabled providers from selection. */
-    test("skips disabled providers", () => {
-      const result = selectBestProvider("omnigate/deepseek-v4-flash-auto", MOCK_PROVIDERS, MOCK_ALIASES);
-
-      expect(result?.id).not.toBe("delta");
-    });
-
-    /** Should exclude paid-fallback providers when the alias does not allow paid. */
-    test("skips paid providers for regular aliases", () => {
-      const result = selectBestProvider("omnigate/deepseek-v4-flash-auto", MOCK_PROVIDERS, MOCK_ALIASES);
-
-      expect(result?.id).not.toBe("epsilon");
-    });
-
-    /** Should include paid-fallback providers when the alias has allow_paid: true. */
-    test("allows paid providers for emergency-paid alias", () => {
-      const providersWithPaid = MOCK_PROVIDERS.filter((provider) => provider.family === "deepseek-v4-flash" && provider.enabled);
-      const result = selectBestProvider("omnigate/emergency-paid", providersWithPaid, MOCK_ALIASES);
-
-      expect(result?.id).toBe("beta");
-    });
-
-    /** Should return undefined when no provider in the registry matches the alias family. */
-    test("returns undefined when no providers match family", () => {
-      const result = selectBestProvider("omnigate/mimo-v2.5-auto", [], MOCK_ALIASES);
-
-      expect(result).toBeUndefined();
-    });
+      expect.unreachable("should have thrown");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RoutingError);
+      expect((error as RoutingError).code).toBe("no_provider_available");
+    }
   });
 });

@@ -9,6 +9,7 @@ import type { ChatCompletionResponse } from "../../shared/signatures";
 const INVALID_REQUEST_CODE = "invalid_request";
 const INTERNAL_ERROR_CODE = "internal_server_error";
 const INTERNAL_ERROR_MESSAGE = "Internal server error";
+const MALFORMED_JSON_MESSAGE = "Malformed JSON request body";
 
 const CLIENT_ERROR_CODES = new Set(["no_provider_available", "no_api_key"]);
 
@@ -20,7 +21,15 @@ const CLIENT_ERROR_CODES = new Set(["no_provider_available", "no_api_key"]);
  * @returns A JSON Response containing either the completion or an error shape.
  */
 export async function handleChatCompletion(context: Context): Promise<Response> {
-  const parseResult = chatCompletionRequestSchema.safeParse(await context.req.json());
+  let body: unknown;
+
+  try {
+    body = await context.req.json();
+  } catch {
+    return sendBadRequestError(context, MALFORMED_JSON_MESSAGE);
+  }
+
+  const parseResult = chatCompletionRequestSchema.safeParse(body);
 
   if (!parseResult.success) {
     return sendBadRequestError(context, parseResult.error.message);

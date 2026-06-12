@@ -1,4 +1,6 @@
-import type { OpenAIChatRequest, RouterRequest } from "../shared/signatures";
+import type { OpenAIChatRequest, RouterRequest, RoutingMode } from "../shared/signatures";
+
+const DEFAULT_RESPONSE_MODE: RoutingMode = "balanced";
 
 /**
  * Strips unknown provider-specific fields (e.g. extra_body) from an incoming
@@ -15,5 +17,9 @@ export function normalizeRequest(request: OpenAIChatRequest): RouterRequest {
     temperature: request.temperature,
     topP: request.top_p,
     stream: request.stream ?? false,
+    tools: request.tools,
+    toolChoice: request.tool_choice,
+    responseFormat: request.response_format,
+    mode: DEFAULT_RESPONSE_MODE,
   };
 }

@@ -2,9 +2,15 @@ import { readFileSync } from "fs";
 import { parse } from "yaml";
 import { join } from "path";
 
-import type { AliasConfig, ProviderCandidate, ProviderRegistry } from "../shared/signatures";
+import type { AliasConfig, ProviderCandidate, ProviderRateLimit, ProviderRegistry } from "../shared/signatures";
 
 const PROVIDER_REGISTRY_PATH = "provider.registry.yaml";
+
+type RawRateLimit = {
+  rpm?: number;
+  rph?: number;
+  rpd?: number;
+};
 
 type RawProvider = {
   id: string;
@@ -15,6 +21,11 @@ type RawProvider = {
   priority: number;
   enabled: boolean;
   paid_fallback?: boolean;
+  context?: number;
+  supports_tools?: boolean;
+  supports_json?: boolean;
+  supports_streaming?: boolean;
+  rate_limit?: RawRateLimit;
 };
 
 type RawRegistry = {
@@ -63,6 +74,18 @@ export function resetProviderRegistry(): void {
   cachedRegistry = undefined;
 }
 
+function toRateLimit(raw: RawRateLimit | undefined): ProviderRateLimit {
+  if (raw === undefined) {
+    return {};
+  }
+
+  return {
+    rpm: raw.rpm,
+    rph: raw.rph,
+    rpd: raw.rpd,
+  };
+}
+
 function toProviderCandidate(raw: RawProvider): ProviderCandidate {
   return {
     id: raw.id,
@@ -73,5 +96,10 @@ function toProviderCandidate(raw: RawProvider): ProviderCandidate {
     enabled: raw.enabled,
     paidFallback: raw.paid_fallback ?? false,
     apiKeyEnv: raw.api_key_env,
+    context: raw.context ?? 0,
+    supportsTools: raw.supports_tools ?? false,
+    supportsJson: raw.supports_json ?? false,
+    supportsStreaming: raw.supports_streaming ?? true,
+    rateLimit: toRateLimit(raw.rate_limit),
   };
 }
