@@ -11,8 +11,13 @@ const NO_API_KEY_MESSAGE = "No provider has a configured API key for this model"
 const PROVIDER_FAILURE_CODE = "provider_request_failed";
 const PROVIDER_REQUEST_FAILED_MESSAGE = "Provider request failed";
 
-/** Error with a machine-readable code for the controller to map to HTTP status. */
+/**
+ * Error with a machine-readable code for the controller to map to HTTP status.
+ * Thrown when no provider is available, API keys are missing, or the upstream
+ * provider returns a non-200 status.
+ */
 export class RoutingError extends Error {
+  /** Machine-readable error code (e.g. "no_provider_available", "no_api_key"). */
   readonly code: string;
 
   constructor(code: string, message: string) {
@@ -22,7 +27,15 @@ export class RoutingError extends Error {
   }
 }
 
-/** Routes a chat completion request through the best available provider. */
+/**
+ * Routes a chat completion request through the best available provider.
+ * Orchestrates request normalisation, provider selection, API key resolution,
+ * adapter dispatch, and response handling.
+ * @param chatRequest  The validated OpenAI-compatible chat request.
+ * @returns The provider's response shaped as an OpenAIChatCompletionResponse.
+ * @throws {RoutingError} When no provider is available, API keys are missing,
+ *   or the upstream provider returns a non-200 status.
+ */
 export async function routeChatCompletion(chatRequest: OpenAIChatRequest): Promise<OpenAIChatCompletionResponse> {
   const routerRequest = normalizeRequest(chatRequest);
   const registry = loadProviderRegistry();
@@ -49,7 +62,14 @@ export async function routeChatCompletion(chatRequest: OpenAIChatRequest): Promi
   return providerResponse.body as OpenAIChatCompletionResponse;
 }
 
-/** Finds the best (highest priority) enabled provider matching the model alias. Exported for testing. */
+/**
+ * Finds the best (highest priority) enabled provider that matches the given
+ * model alias.  Exported for unit-testing.
+ * @param modelAlias  The model alias string (e.g. "omnigate/deepseek-v4-flash-auto").
+ * @param providers   The list of provider candidates to search.
+ * @param aliases     Alias configuration mapping alias names to family lists.
+ * @returns The best matching ProviderCandidate, or undefined when no match exists.
+ */
 export function selectBestProvider(
   modelAlias: string,
   providers: ProviderCandidate[],
@@ -61,11 +81,11 @@ export function selectBestProvider(
     return undefined;
   }
 
-  const allowPaid = aliasConfig.allow_paid === true;
+  const shouldAllowPaid = aliasConfig.allow_paid === true;
 
   const matchingProviders = providers
     .filter((candidate) => aliasConfig.families.includes(candidate.family))
-    .filter((candidate) => candidate.enabled && (allowPaid || !candidate.paidFallback))
+    .filter((candidate) => candidate.enabled && (shouldAllowPaid || !candidate.paidFallback))
     .sort((first, second) => second.priority - first.priority);
 
   return matchingProviders[0];

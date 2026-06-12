@@ -5,7 +5,12 @@ const CHAT_COMPLETIONS_PATH = "/chat/completions";
 const CONTENT_TYPE_JSON = "application/json";
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-/** Creates an adapter that works with any OpenAI-compatible chat API. */
+/**
+ * Creates an adapter that works with any OpenAI-compatible chat API.
+ * The adapter builds requests at `{baseUrl}/chat/completions` with a Bearer
+ * token Authorization header and a 30-second timeout via AbortController.
+ * @returns A configured ProviderAdapter instance.
+ */
 export function createOpenAiCompatibleAdapter(): ProviderAdapter {
   return {
     id: "openai-compatible",

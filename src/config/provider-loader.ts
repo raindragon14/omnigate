@@ -24,7 +24,11 @@ type RawRegistry = {
 
 let cachedRegistry: ProviderRegistry | undefined;
 
-/** Loads and parses provider.registry.yaml into a typed ProviderRegistry (cached after first call). */
+/**
+ * Loads and parses provider.registry.yaml into a typed ProviderRegistry.
+ * The result is cached after the first call to avoid repeated disk I/O.
+ * @returns The parsed provider registry.
+ */
 export function loadProviderRegistry(): ProviderRegistry {
   if (cachedRegistry !== undefined) {
     return cachedRegistry;
@@ -42,12 +46,19 @@ export function loadProviderRegistry(): ProviderRegistry {
   return cachedRegistry;
 }
 
-/** Reads an API key from the environment for the given env-var name. */
+/**
+ * Reads an API key from the environment for the given env-var name.
+ * @param apiKeyEnv  The name of the environment variable (e.g. "HF_TOKEN").
+ * @returns The API key string, or undefined when not set.
+ */
 export function resolveApiKey(apiKeyEnv: string): string | undefined {
   return Bun.env[apiKeyEnv];
 }
 
-/** Resets the cached registry (useful for testing or hot-reload). */
+/**
+ * Resets the cached provider registry so the next call to loadProviderRegistry
+ * re-reads the YAML file from disk.  Useful for testing or hot-reload scenarios.
+ */
 export function resetProviderRegistry(): void {
   cachedRegistry = undefined;
 }

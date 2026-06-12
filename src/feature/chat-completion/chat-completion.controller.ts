@@ -12,6 +12,13 @@ const INTERNAL_ERROR_MESSAGE = "Internal server error";
 
 const CLIENT_ERROR_CODES = new Set(["no_provider_available", "no_api_key"]);
 
+/**
+ * Handles POST /v1/chat/completions requests.  Validates the body with Zod,
+ * delegates to routeChatCompletion, and maps errors to appropriate HTTP
+ * responses (400 for client errors, 500 for server errors).
+ * @param context  Hono request context.
+ * @returns A JSON Response containing either the completion or an error shape.
+ */
 export async function handleChatCompletion(context: Context): Promise<Response> {
   const parseResult = chatCompletionRequestSchema.safeParse(await context.req.json());
 

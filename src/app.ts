@@ -5,7 +5,11 @@ import { registerModelRoute } from "./feature/model/model.route";
 import { registerChatCompletionRoute } from "./feature/chat-completion/chat-completion.route";
 import { registerAppErrorHandler } from "./shared/app-error";
 
-/** Creates the Hono application with all feature routes and global error handling. */
+/**
+ * Creates and configures the Hono application with all feature routes
+ * (health, models, chat completions) and global error handling.
+ * @returns A fully configured Hono application.
+ */
 export function createApp(): Hono {
   const app = new Hono();
 

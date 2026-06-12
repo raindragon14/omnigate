@@ -12,7 +12,10 @@ const ROUTER_MODELS: RouterModel[] = [
   createRouterModel("omnigate/emergency-paid"),
 ];
 
-/** Returns the hardcoded list of model aliases exposed by the router. */
+/**
+ * Returns the hardcoded list of model aliases exposed by the router.
+ * @returns A ModelListResponse containing all router model aliases.
+ */
 export function listRouterModels(): ModelListResponse {
   return {
     object: MODEL_LIST_OBJECT_TYPE,
