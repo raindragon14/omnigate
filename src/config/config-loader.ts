@@ -1,4 +1,4 @@
-import type { AppConfig } from "../../docs/codebase-signatures";
+import type { AppConfig } from "../shared/signatures";
 
 export const DEFAULT_PORT = 8787;
 const MIN_PORT = 1;

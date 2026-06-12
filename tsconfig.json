@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["bun-types"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "docs/codebase-signatures.d.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

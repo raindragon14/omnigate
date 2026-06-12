@@ -68,29 +68,34 @@ OpenCode config:
 
 ## Providers
 
-OpenCode Zen, OpenRouter, Kilo Gateway, Hugging Face, Nous Portal, DeepSeek.
-
-[Full provider table →](docs/PRD.md#6-provider-awal)
+| Provider | Access | Cost Model | Est. Rate Limits |
+|---|---|---|---|
+| OpenCode Zen | API key | Free (limited period) | 5-10 RPM |
+| OpenCode Zen (MiMo) | API key | Free (limited period) | 5-10 RPM |
+| OpenRouter | API key | Free | ~20 RPM |
+| Kilo Gateway | API key | Free (verified account) | ~200 RPH |
+| Hugging Face | HF Token | Small monthly credit | Conservative |
+| Nous Portal | API key | Free (manual verify) | Unknown |
+| DeepSeek (paid) | API key | $0.14/$0.28 per 1M tokens | Standard |
 
 ## Security
 
-API keys live in your `.env`, loaded into `process.env`, and sent directly to your chosen provider. OmniGate never stores, logs, or transmits them anywhere else. No telemetry, no phone-home, no cloud backend — the project has zero infrastructure you don't control.
+API keys live in your `.env`, loaded into `process.env`, and sent directly to your chosen provider. OmniGate never stores, logs, or transmits them anywhere else.
 
-[Security model details →](docs/SDS.md#17-privacy-design)
+| Concern | How OmniGate handles it |
+|---|---|
+| **API keys** | Read from `process.env` only. Never logged, never stored in SQLite, never sent to any OmniGate server (there is none). |
+| **Prompt data** | Stays in memory during request processing. Never sent to a third-party server except the intended provider. |
+| **Telemetry** | Zero. No analytics, no crash reporting, no phone-home. The project has no backend. |
+| **Database** | Local SQLite file contains usage metrics and provider state only — never API keys or prompt content. |
 
 ## Architecture
 
 ```
-HTTP Client → Hono → Feature Layer → Router Core → Policies → Provider Adapter → Provider API
+Client → HTTP (Hono) → Feature Layer → Router Core → Policies → Provider Adapter → Provider API
 ```
 
-[Architecture docs →](docs/SDS.md#5-feature-driven-layering) | [Routing pipeline →](docs/SDS.md#6-core-runtime-flow)
-
-## Project Status
-
-MVP in progress — health and model endpoints live, chat routing under active development.
-
-[See sprint breakdown →](docs/SPRINT_BREAKDOWN.md)
+The router processes requests through five stages: **normalize** (clean input), **filter** (remove invalid providers), **score** (rank by quality/latency/quota), **execute** (send to best candidate), and **fallback** (retry next on failure). Each provider is accessed through an adapter that handles API-specific quirks without leaking into routing logic.
 
 ## Scripts
 

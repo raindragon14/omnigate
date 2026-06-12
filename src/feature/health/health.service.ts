@@ -1,4 +1,4 @@
-import type { HealthResponse } from "../../../docs/codebase-signatures";
+import type { HealthResponse } from "../../shared/signatures";
 
 const SERVICE_NAME = "omnigate";
 const STATUS_OK = "ok";

@@ -1,4 +1,4 @@
-import type { Result } from "../../docs/codebase-signatures";
+import type { Result } from "./signatures";
 
 export function createOkResult<TValue>(value: TValue): Result<TValue> {
   return {

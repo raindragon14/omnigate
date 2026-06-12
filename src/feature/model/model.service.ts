@@ -1,4 +1,4 @@
-import type { ModelListResponse, RouterModel } from "../../../docs/codebase-signatures";
+import type { ModelListResponse, RouterModel } from "../../shared/signatures";
 
 const MODEL_OBJECT_TYPE = "model";
 const MODEL_LIST_OBJECT_TYPE = "list";

@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
-import type { AppError } from "../../docs/codebase-signatures";
+import type { AppError } from "./signatures";
 import { HTTP_STATUS_INTERNAL_SERVER_ERROR, HTTP_STATUS_NOT_FOUND } from "./http-status";
 
 const INTERNAL_SERVER_ERROR_CODE = "internal_server_error";
