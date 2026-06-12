@@ -1,0 +1,70 @@
+providers:
+  - id: opencode_zen_deepseek
+    base_url: "https://opencode.ai/zen/v1"
+    model: "opencode/deepseek-v4-flash-free"
+    api_key_env: "OPENCODE_API_KEY"
+    family: "deepseek-v4-flash"
+    priority: 100
+    enabled: true
+
+  - id: opencode_zen_mimo
+    base_url: "https://opencode.ai/zen/v1"
+    model: "opencode/mimo-v2.5-free"
+    api_key_env: "OPENCODE_API_KEY"
+    family: "mimo-v2.5"
+    priority: 98
+    enabled: true
+
+  - id: openrouter_deepseek_free
+    base_url: "https://openrouter.ai/api/v1"
+    model: "deepseek/deepseek-v4-flash:free"
+    api_key_env: "OPENROUTER_API_KEY"
+    family: "deepseek-v4-flash"
+    priority: 90
+    enabled: true
+
+  - id: kilo_deepseek_free
+    base_url: "https://api.kilo.ai/api/gateway"
+    model: "kilo/deepseek/deepseek-v4-flash:free"
+    api_key_env: "KILO_API_KEY"
+    family: "deepseek-v4-flash"
+    priority: 85
+    enabled: true
+
+  - id: hf_deepseek
+    base_url: "https://router.huggingface.co/v1"
+    model: "deepseek-ai/DeepSeek-V4-Flash"
+    api_key_env: "HF_TOKEN"
+    family: "deepseek-v4-flash"
+    priority: 70
+    enabled: true
+
+  - id: nous_deepseek_free
+    base_url: "https://portal.nousresearch.com/v1"
+    model: "deepseek/deepseek-v4-flash:free"
+    api_key_env: "NOUS_API_KEY"
+    family: "deepseek-v4-flash"
+    priority: 60
+    enabled: false
+
+  - id: deepseek_official_fallback
+    base_url: "https://api.deepseek.com"
+    model: "deepseek-v4-flash"
+    api_key_env: "DEEPSEEK_API_KEY"
+    family: "deepseek-v4-flash"
+    priority: 40
+    enabled: true
+    paid_fallback: true
+
+aliases:
+  omnigate/deepseek-v4-flash-auto:
+    families: ["deepseek-v4-flash"]
+  omnigate/mimo-v2.5-auto:
+    families: ["mimo-v2.5"]
+  omnigate/coding-balanced:
+    families: ["deepseek-v4-flash", "mimo-v2.5"]
+  omnigate/coding-fast:
+    families: ["mimo-v2.5", "deepseek-v4-flash"]
+  omnigate/emergency-paid:
+    families: ["deepseek-v4-flash"]
+    allow_paid: true

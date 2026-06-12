@@ -9,6 +9,7 @@ const INTERNAL_SERVER_ERROR_MESSAGE = "Internal server error";
 const NOT_FOUND_ERROR_CODE = "not_found";
 const NOT_FOUND_ERROR_MESSAGE = "Route not found";
 
+/** Creates an AppError with the given code, message, and HTTP status. */
 export function createAppError(code: string, message: string, statusCode: number): AppError {
   return {
     code,
@@ -17,6 +18,7 @@ export function createAppError(code: string, message: string, statusCode: number
   };
 }
 
+/** Registers global notFound and onError handlers that return OpenAI-compatible error shapes. */
 export function registerAppErrorHandler(app: Hono): void {
   app.notFound((context) => {
     const appError = createAppError(NOT_FOUND_ERROR_CODE, NOT_FOUND_ERROR_MESSAGE, HTTP_STATUS_NOT_FOUND);
