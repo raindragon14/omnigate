@@ -73,26 +73,21 @@ describe("chat completion feature", () => {
     });
 
     test("skips disabled providers", () => {
-      // delta has priority 70 but is disabled; beta (90) should win
       const result = selectBestProvider("omnigate/deepseek-v4-flash-auto", MOCK_PROVIDERS, MOCK_ALIASES);
 
       expect(result?.id).not.toBe("delta");
     });
 
     test("skips paid providers for regular aliases", () => {
-      // epsilon has paidFallback=true, should not be selected for regular alias
       const result = selectBestProvider("omnigate/deepseek-v4-flash-auto", MOCK_PROVIDERS, MOCK_ALIASES);
 
       expect(result?.id).not.toBe("epsilon");
     });
 
     test("allows paid providers for emergency-paid alias", () => {
-      const providersWithPaid = MOCK_PROVIDERS.filter((p) => p.family === "deepseek-v4-flash" && p.enabled);
+      const providersWithPaid = MOCK_PROVIDERS.filter((provider) => provider.family === "deepseek-v4-flash" && provider.enabled);
       const result = selectBestProvider("omnigate/emergency-paid", providersWithPaid, MOCK_ALIASES);
 
-      // beta (90), alpha (80), epsilon (50) are enabled in deepseek family
-      // epsilon has paidFallback=true — but paid IS allowed for this alias
-      // beta has highest priority (90) among all, so it should win
       expect(result?.id).toBe("beta");
     });
 

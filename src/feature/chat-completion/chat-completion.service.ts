@@ -66,7 +66,7 @@ export function selectBestProvider(
   const matchingProviders = providers
     .filter((candidate) => aliasConfig.families.includes(candidate.family))
     .filter((candidate) => candidate.enabled && (allowPaid || !candidate.paidFallback))
-    .sort((a, b) => b.priority - a.priority);
+    .sort((first, second) => second.priority - first.priority);
 
   return matchingProviders[0];
 }
