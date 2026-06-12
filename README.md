@@ -14,6 +14,7 @@
   <a href="https://github.com/raindragon14/omnigate/actions"><img src="https://img.shields.io/badge/build-unknown-lightgrey?style=flat-square&logo=github" alt="Build"></a>
   <a href="https://github.com/raindragon14/omnigate"><img src="https://img.shields.io/github/stars/raindragon14/omnigate?style=flat-square&logo=github" alt="Stars"></a>
   <a href="#security-model"><img src="https://img.shields.io/badge/security-zero--trust-emerald?style=flat-square" alt="Zero Trust"></a>
+  <a href="https://github.com/raindragon14/omnigate/pkgs/container/omnigate"><img src="https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker" alt="Docker"></a>
 </p>
 
 ---
@@ -51,7 +52,8 @@ curl http://localhost:8787/v1/chat/completions \
 - [Why OmniGate?](#why-omnigate)
 - [Architecture](#architecture)
 - [Routing Pipeline](#routing-pipeline)
-- [Quick Start](#quick-start)
+- [Docker Deployment](#docker-deployment-vps)
+- [Quick Start (Local)](#quick-start-local)
 - [Model Aliases](#model-aliases)
 - [Routing Modes](#routing-modes)
 - [API Reference](#api-reference)
@@ -198,7 +200,55 @@ score = 0.30 × qualityScore
 | Privacy risk | -10 to -30 |
 | Feature mismatch | Rejected |
 
-## Quick Start
+## Docker Deployment (VPS)
+
+Deploy OmniGate on any VPS with Docker in under a minute:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/raindragon14/omnigate/main/deploy.sh | bash
+```
+
+Or step by step:
+
+```bash
+git clone https://github.com/raindragon14/omnigate
+cd omnigate
+
+# Configure your API keys
+cp .env.example .env
+# Edit .env and paste your keys
+
+# Build and start
+docker compose up -d --build
+```
+
+The server starts on `http://<your-vps-ip>:8787`.
+
+| Command | What it does |
+|---------|-------------|
+| `docker compose up -d --build` | Build and start in background |
+| `docker compose logs -f` | Follow logs |
+| `docker compose down` | Stop |
+| `git pull && docker compose up -d --build` | Update to latest |
+
+### Image Registry
+
+Pre-built images are available on GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/raindragon14/omnigate:latest
+
+docker run -d \
+  --name omnigate \
+  -p 8787:8787 \
+  --env-file .env \
+  -v omnigate_data:/app/data \
+  ghcr.io/raindragon14/omnigate:latest
+```
+
+Tags: `latest` (main branch), `1.0.0` (semver releases), `sha-<abc1234>` (every commit).
+
+## Quick Start (Local)
 
 **Prerequisites:** [Bun](https://bun.sh) 1.3.14+
 
