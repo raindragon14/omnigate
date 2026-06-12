@@ -1,8 +1,8 @@
-# OmniGate 🚪
+# OmniGate
 
-**One endpoint to reach every LLM.** OmniGate is an OpenAI-compatible router that unifies multiple model providers — free, trial, subscription, and paid — behind a single local API. It intelligently selects the best provider for every request based on quality, latency, quota, reliability, privacy, and cost.
+**Self-hosted LLM gateway — unify every provider behind one endpoint, on your machine, with your keys.**
 
-```bash
+```
 curl http://localhost:8787/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -13,54 +13,61 @@ curl http://localhost:8787/v1/chat/completions \
 
 ## Why OmniGate?
 
-LLM providers are fragmented. Each has its own API, rate limits, pricing model, and quirks. Switching between them — or hedging against one going down — means reconfiguring your client every time.
+Every LLM provider has a different API, rate limit, pricing model, and availability. Juggling them manually is brittle. OmniGate sits **on your machine** and intelligently routes each request to the best available provider.
 
-**OmniGate solves this** by acting as a transparent middleware between you and every provider:
+**Zero cloud dependency. Zero data leakage. Zero account needed with us.**
 
-- **One URL, one API key convention** — Point any OpenAI-compatible client at OmniGate.
-- **Smart fallback** — When one provider is rate-limited (429), down (5xx), or slow, OmniGate silently retries the next best option.
-- **Quota-aware routing** — It tracks your remaining free tier across all providers and picks the one with the most runway.
-- **Privacy-first** — Strict mode blocks sensitive prompts from free/trial providers that may use data for model training.
-- **Cost-controlled** — Paid fallback is disabled by default. When enabled, a hard monthly cap prevents bill shock.
+You bring your own API keys. OmniGate never sees them — they live in your `.env` file and go directly to the provider APIs. No telemetry, no signup, no third party between you and your models.
+
+- **Self-hosted** — runs as a local process. No SaaS, no cloud, no vendor lock-in.
+- **Your keys, your risk** — API keys stay in your environment. OmniGate never stores, logs, or transmits them anywhere except to the provider you chose.
+- **Smart routing** — picks the best provider per request based on quality, latency, remaining quota, and reliability.
+- **Automatic fallback** — when a provider is rate-limited or down, retries the next best candidate.
+- **Free-tier maximizer** — tracks quota across all free/trial providers and routes to the one with the most runway.
+- **Privacy mode** — strict mode blocks sensitive prompts from reaching free/trial providers that may use data for training.
+- **Cost guardrails** — paid fallback is off by default. When enabled, a hard monthly cap prevents bill shock.
+
+> OmniGate is a router, not a proxy, not a bypass, not a service. Every request respects each provider's rate limits and terms of service.
 
 ## How It Works
 
 ```
-┌──────────┐     POST /v1/chat/completions     ┌──────────┐
-│ OpenCode │ ─────────────────────────────────> │ OmniGate │
-│ or any   │     {"model": "omnigate/..."}      │          │
-│ OpenAI   │                                    │          │
-│ Client   │     ┌──────────────────────┐       │          │
-│          │     │  1. Normalize request │       │          │
-│          │     │  2. Filter providers   │       │          │
-│          │     │  3. Score & rank       │       │          │
-│          │     │  4. Execute + fallback │       │          │
-│          │     │  5. Log metrics        │       │          │
-│          │     └──────────────────────┘       │          │
-│          │                                    │          │
-│          │  ◄───────────────────────────────── │          │
-│          │     OpenAI-compatible response      │          │
-└──────────┘                                    └────┬─────┘
-                                                      │
-                     ┌────────────────────────────────┼────────────────────┐
-                     ▼                                ▼                    ▼
-              ┌────────────┐                  ┌────────────┐      ┌────────────┐
-              │ OpenCode   │                  │ OpenRouter │      │   DeepSeek │
-              │ Zen (free) │                  │  (free)    │      │ (paid, cap)│
-              └────────────┘                  └────────────┘      └────────────┘
+┌──────────┐     POST /v1/chat/completions     ┌─────────────────┐
+│ OpenCode │ ─────────────────────────────────> │    OmniGate     │
+│ or any   │     {"model": "omnigate/..."}      │  (localhost)    │
+│ OpenAI   │                                    │                 │
+│ Client   │     ┌──────────────────────┐       │                 │
+│          │     │  1. Normalize request │       │  Self-hosted   │
+│          │     │  2. Filter providers   │       │  Your .env     │
+│          │     │  3. Score & rank       │       │  Your keys     │
+│          │     │  4. Execute + fallback │       │  Your machine  │
+│          │     │  5. Log metrics        │       │                 │
+│          │     └──────────────────────┘       │                 │
+│          │                                    │                 │
+│          │  ◄───────────────────────────────── │                 │
+│          │     OpenAI-compatible response      └────────┬────────┘
+└──────────┘                                              │
+                     ┌─────────────────────────────────────┼──────────────────┐
+                     ▼                                     ▼                  ▼
+              ┌────────────┐                      ┌────────────┐    ┌────────────┐
+              │ OpenCode   │                      │ OpenRouter │    │   DeepSeek │
+              │ Zen (free) │                      │  (free)    │    │ (paid, cap)│
+              └────────────┘                      └────────────┘    └────────────┘
 ```
+
+API keys flow from your `.env` → your local process → provider API. They never touch a third-party server, never get logged, never get stored in the database.
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/<your-org>/omnigate
+git clone https://github.com/raindragon14/omnigate
 cd omnigate
 bun install
-cp .env.example .env   # Add your API keys
+cp .env.example .env   # Paste your API keys — they never leave this file
 bun run dev
 ```
 
-OpenCode config:
+Add to your OpenCode config:
 
 ```json
 {
@@ -68,47 +75,38 @@ OpenCode config:
   "provider": {
     "omnigate": {
       "name": "OmniGate",
-      "options": { "baseURL": "http://localhost:8787/v1" },
-      "models": {
-        "deepseek-v4-flash-auto": {},
-        "mimo-v2.5-auto": {},
-        "coding-balanced": {},
-        "coding-fast": {}
-      }
+      "options": { "baseURL": "http://localhost:8787/v1" }
     }
   }
 }
 ```
 
+That's it. No account, no registration, no cloud dependency.
+
 ## Model Aliases
 
-| Alias | What it routes to |
-|-------|-------------------|
+| Alias | Routes to |
+|-------|-----------|
 | `omnigate/deepseek-v4-flash-auto` | DeepSeek V4 Flash via best available free provider |
 | `omnigate/mimo-v2.5-auto` | MiMo V2.5 via best available free provider |
 | `omnigate/coding-balanced` | Best all-rounder coding model |
 | `omnigate/coding-fast` | Fastest coding model |
 | `omnigate/emergency-paid` | Paid fallback (off by default; configure a budget) |
 
-## Routing Behavior
+## Routing
 
-OmniGate scores providers on every request using six weighted dimensions:
+OmniGate scores providers on every request:
 
-- **Quality** (30%) — historical correctness rate
-- **Availability** (20%) — uptime and error rate
-- **Throughput** (15%) — tokens per second
-- **Latency** (15%) — time to first token
-- **Quota remaining** (10%) — how much free/paid capacity is left
-- **Feature match** (10%) — tool calling, JSON mode, streaming, context window
+- **Quality** (30%), **Availability** (20%), **Throughput** (15%), **Latency** (15%), **Quota remaining** (10%), **Feature match** (10%)
 
-Requests can specify a `mode` to bias the score:
+Override the scoring bias with `mode`:
 
-| Mode | Best for |
-|------|----------|
-| `balanced` | Everyday use (default) |
-| `quality` | Complex reasoning tasks |
+| Mode | When to use |
+|------|-------------|
+| `balanced` | Everyday default |
+| `quality` | Complex reasoning |
 | `speed` | Real-time chat / autocomplete |
-| `survival` | Stretching limited free quota |
+| `survival` | Stretch limited free quota |
 
 ## API
 
@@ -118,63 +116,53 @@ Requests can specify a `mode` to bias the score:
 | `GET` | `/v1/models` | List model aliases |
 | `POST` | `/v1/chat/completions` | Chat (streaming & non-streaming) |
 | `GET` | `/admin/providers` | Provider state & cooldowns |
-| `GET` | `/admin/metrics` | Usage & latency metrics |
+| `GET` | `/admin/metrics` | Usage & latency |
 
 ## Supported Providers
 
-| Provider | Access | Cost Model | Default Priority |
-|----------|--------|------------|-----------------:|
+| Provider | Access | Cost Model | Priority |
+|----------|--------|------------|---------:|
 | OpenCode Zen | API key | Free (limited period) | 100 |
 | OpenCode Zen (MiMo) | API key | Free (limited period) | 98 |
 | OpenRouter | API key | Free (RPM capped) | 90 |
 | Kilo Gateway | API key | Free (verified account) | 85 |
 | Hugging Face | HF Token | Small monthly credit | 70 |
-| Nous Portal | API key | Free (requires manual verify) | 60 |
+| Nous Portal | API key | Free (manual verify required) | 60 |
 | DeepSeek (paid) | API key | $0.14/$0.28 per 1M tokens | 40 |
 
 ## Architecture
 
 ```
 src/
-├── server.ts
-├── app.ts
-├── feature/          # Feature-driven modules
-│   ├── health/       # GET /health
-│   ├── model/        # GET /v1/models
-│   ├── chat-completion/  # POST /v1/chat/completions
-│   └── admin/        # Admin dashboard
-├── router/           # Core routing engine
-├── provider/         # Provider adapters (one per provider)
-├── policy/           # Rate-limit, budget, quota, cooldown, privacy
-├── storage/          # SQLite persistence
-├── job/              # Health probes & benchmarks
-├── config/           # Config loader & provider YAML
-└── shared/           # Common utilities & types
+├── server.ts             # Entrypoint — runs on your machine
+├── app.ts                # Hono app composition
+├── feature/              # Feature-driven modules
+├── router/               # Core routing engine
+├── provider/             # Provider adapters
+├── policy/               # Rate-limit, budget, quota, privacy
+├── storage/              # SQLite (local only — no secrets stored)
+├── job/                  # Health probes
+├── config/               # Config loader & YAML provider registry
+└── shared/               # Common utilities
 ```
+
+## Security Model
+
+| Concern | How OmniGate handles it |
+|---------|------------------------|
+| API keys | Read from `process.env` only. Never logged, never stored in SQLite, never sent anywhere except to the intended provider. |
+| Prompt data | Stays in memory during request processing. Never sent to any OmniGate server (there is none). |
+| Telemetry | Zero. No analytics, no crash reporting, no phone-home. |
+| Database | Local SQLite file. Contains usage metrics and provider state — never API keys or prompt content. |
+| Updates | You control when and whether to update. No forced upgrades. |
 
 ## Scripts
 
-| Command | What it does |
+| Command | Description |
 |---------|-------------|
-| `bun run dev` | Start with watch mode |
+| `bun run dev` | Start server with watch mode |
 | `bun test` | Run all tests |
 | `bun run typecheck` | TypeScript check |
-
-## Project Status
-
-OmniGate is in active development (MVP phase). Currently implemented:
-- [x] HTTP server with Hono (health + models endpoints)
-- [x] OpenAI-compatible error shapes
-- [x] Config loader with port validation
-- [x] Provider registry schema (YAML)
-- [x] Test infrastructure (unit + integration)
-- [ ] Chat completion routing (in progress)
-- [ ] Provider adapters & fallback
-- [ ] Rate limiting & cooldown
-- [ ] SQLite persistence
-- [ ] Privacy mode
-- [ ] Streaming
-- [ ] Health probes & EWMA scoring
 
 ## License
 
@@ -182,4 +170,4 @@ MIT
 
 ---
 
-*OmniGate is not a proxy, a bypass, or an abuse tool. Every request respects provider rate limits and terms of service.*
+*OmniGate is free, open-source, and self-hosted. You control your keys, your data, and your infrastructure.*
