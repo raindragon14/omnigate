@@ -6,7 +6,7 @@ import { HTTP_STATUS_OK } from "../../shared/http-status";
 const HEALTH_ROUTE_PATH = "/health";
 const EXPECTED_HEALTH_RESPONSE = {
   status: "ok",
-  service: "free-model-router",
+  service: "omnigate",
 };
 
 describe("health integration", () => {

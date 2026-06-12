@@ -2,14 +2,14 @@ import type { ModelListResponse, RouterModel } from "../../../docs/codebase-sign
 
 const MODEL_OBJECT_TYPE = "model";
 const MODEL_LIST_OBJECT_TYPE = "list";
-const MODEL_OWNER = "free-router";
+const MODEL_OWNER = "omnigate";
 
 const ROUTER_MODELS: RouterModel[] = [
-  createRouterModel("free-router/deepseek-v4-flash-auto"),
-  createRouterModel("free-router/mimo-v2.5-auto"),
-  createRouterModel("free-router/coding-balanced"),
-  createRouterModel("free-router/coding-fast"),
-  createRouterModel("free-router/emergency-paid"),
+  createRouterModel("omnigate/deepseek-v4-flash-auto"),
+  createRouterModel("omnigate/mimo-v2.5-auto"),
+  createRouterModel("omnigate/coding-balanced"),
+  createRouterModel("omnigate/coding-fast"),
+  createRouterModel("omnigate/emergency-paid"),
 ];
 
 export function listRouterModels(): ModelListResponse {

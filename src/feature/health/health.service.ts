@@ -1,6 +1,6 @@
 import type { HealthResponse } from "../../../docs/codebase-signatures";
 
-const SERVICE_NAME = "free-model-router";
+const SERVICE_NAME = "omnigate";
 const STATUS_OK = "ok";
 
 export function getHealthStatus(): HealthResponse {

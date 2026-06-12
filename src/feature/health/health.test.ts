@@ -4,7 +4,7 @@ import { getHealthStatus } from "./health.service";
 
 const EXPECTED_HEALTH_RESPONSE = {
   status: "ok",
-  service: "free-model-router",
+  service: "omnigate",
 } as const;
 
 describe("health feature", () => {
