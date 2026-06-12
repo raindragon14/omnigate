@@ -178,3 +178,33 @@ export declare function normalizeRequest(request: OpenAIChatRequest): RouterRequ
 
 /** Registers the POST /v1/chat/completions route. */
 export declare function registerChatCompletionRoute(app: Hono): void;
+
+// ---------------------------------------------------------------------------
+// Provider adapters
+// ---------------------------------------------------------------------------
+
+/** Contract every provider adapter must implement. */
+export interface ProviderAdapter {
+  readonly id: string;
+  supports(request: RouterRequest, provider: ProviderCandidate): boolean;
+  transformRequest(request: RouterRequest, provider: ProviderCandidate, apiKey: string): ProviderRequest;
+  send(request: ProviderRequest): Promise<ProviderResponse>;
+}
+
+/** Creates an adapter that works with any OpenAI-compatible chat API. */
+export declare function createOpenAiCompatibleAdapter(): ProviderAdapter;
+
+/** Reads an API key from the environment for the given env-var name. */
+export declare function resolveApiKey(apiKeyEnv: string): string | undefined;
+
+/** Error response body returned by the chat completion endpoint. */
+export type ChatCompletionErrorResponse = {
+  error: {
+    message: string;
+    type: string;
+    code: string;
+  };
+};
+
+/** Routes a chat completion request through the best available provider. */
+export declare function routeChatCompletion(chatRequest: OpenAIChatRequest): Promise<OpenAIChatCompletionResponse>;

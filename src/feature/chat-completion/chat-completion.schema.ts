@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+/** Zod schema for a single chat message, enforcing valid roles and content rules. */
 export const messageSchema = z.object({
   role: z.enum(["system", "user", "assistant", "tool"]),
   content: z.string().nullable(),
@@ -17,6 +18,7 @@ export const messageSchema = z.object({
   { message: "content can only be null for assistant or tool messages" },
 );
 
+/** Zod schema for the POST /v1/chat/completions request body (OpenAI-compatible). */
 export const chatCompletionRequestSchema = z.object({
   model: z.string().min(1),
   messages: z.array(messageSchema).min(1),

@@ -27,7 +27,9 @@ const MOCK_ALIASES = {
   "omnigate/emergency-paid": { families: ["deepseek-v4-flash"], allow_paid: true },
 };
 
+/** Unit tests for chat-completion feature: request normalisation and provider selection. */
 describe("chat completion feature", () => {
+  /** Should convert an OpenAI-style request into the internal RouterRequest shape. */
   test("normalizes OpenAI request to router request", () => {
     const routerRequest = normalizeRequest(MOCK_CHAT_REQUEST);
 
@@ -39,12 +41,14 @@ describe("chat completion feature", () => {
     expect(routerRequest.stream).toBe(false);
   });
 
+  /** Should default stream to false when the incoming request omits it. */
   test("defaults stream to false when missing", () => {
     const { stream } = normalizeRequest({ model: "test", messages: [{ role: "user", content: "hi" }] });
 
     expect(stream).toBe(false);
   });
 
+  /** Should strip unknown fields (e.g. extra_body) during normalisation. */
   test("strips unknown fields during normalization", () => {
     const raw = {
       model: "test",
@@ -58,13 +62,16 @@ describe("chat completion feature", () => {
     expect("extra_body" in routerRequest).toBe(false);
   });
 
+  /** Unit tests for the selectBestProvider function inside chat-completion.service. */
   describe("selectBestProvider", () => {
+    /** Should return undefined when the model alias is not found in the registry. */
     test("returns undefined for unknown alias", () => {
       const result = selectBestProvider("unknown/model", MOCK_PROVIDERS, MOCK_ALIASES);
 
       expect(result).toBeUndefined();
     });
 
+    /** Should select the provider with the highest priority among enabled providers in the matching family. */
     test("returns highest priority enabled provider for matching family", () => {
       const result = selectBestProvider("omnigate/deepseek-v4-flash-auto", MOCK_PROVIDERS, MOCK_ALIASES);
 
@@ -72,18 +79,21 @@ describe("chat completion feature", () => {
       expect(result?.id).toBe("beta");
     });
 
+    /** Should exclude disabled providers from selection. */
     test("skips disabled providers", () => {
       const result = selectBestProvider("omnigate/deepseek-v4-flash-auto", MOCK_PROVIDERS, MOCK_ALIASES);
 
       expect(result?.id).not.toBe("delta");
     });
 
+    /** Should exclude paid-fallback providers when the alias does not allow paid. */
     test("skips paid providers for regular aliases", () => {
       const result = selectBestProvider("omnigate/deepseek-v4-flash-auto", MOCK_PROVIDERS, MOCK_ALIASES);
 
       expect(result?.id).not.toBe("epsilon");
     });
 
+    /** Should include paid-fallback providers when the alias has allow_paid: true. */
     test("allows paid providers for emergency-paid alias", () => {
       const providersWithPaid = MOCK_PROVIDERS.filter((provider) => provider.family === "deepseek-v4-flash" && provider.enabled);
       const result = selectBestProvider("omnigate/emergency-paid", providersWithPaid, MOCK_ALIASES);
@@ -91,6 +101,7 @@ describe("chat completion feature", () => {
       expect(result?.id).toBe("beta");
     });
 
+    /** Should return undefined when no provider in the registry matches the alias family. */
     test("returns undefined when no providers match family", () => {
       const result = selectBestProvider("omnigate/mimo-v2.5-auto", [], MOCK_ALIASES);
 

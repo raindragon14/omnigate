@@ -7,7 +7,9 @@ const EXPECTED_HEALTH_RESPONSE = {
   service: "omnigate",
 } as const;
 
+/** Unit tests for the health feature. */
 describe("health feature", () => {
+  /** Should return ok status with the service name. */
   test("returns service status", () => {
     expect(getHealthStatus()).toEqual(EXPECTED_HEALTH_RESPONSE);
   });

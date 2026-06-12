@@ -24,7 +24,9 @@ const INTERNAL_SERVER_ERROR_RESPONSE = {
   },
 };
 
+/** Cross-feature integration tests verifying app-level error handling. */
 describe("app integration", () => {
+  /** Should return OpenAI-compatible error for unknown route. */
   test("returns OpenAI-compatible error for unknown route", async () => {
     const app = createApp();
     const response = await app.request(UNKNOWN_ROUTE_PATH);
@@ -33,6 +35,7 @@ describe("app integration", () => {
     expect(await response.json()).toEqual(NOT_FOUND_ERROR_RESPONSE);
   });
 
+  /** Should return OpenAI-compatible error for unhandled exceptions. */
   test("returns OpenAI-compatible error for unhandled exception", async () => {
     const app = createApp();
 

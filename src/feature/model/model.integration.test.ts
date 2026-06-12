@@ -13,7 +13,9 @@ const EXPECTED_MODEL_IDS = [
   "omnigate/emergency-paid",
 ];
 
+/** Integration tests for the GET /v1/models endpoint. */
 describe("model integration", () => {
+  /** Should return 200 with the list of available model aliases. */
   test("handles GET /v1/models", async () => {
     const app = createApp();
     const response = await app.request(MODEL_ROUTE_PATH);

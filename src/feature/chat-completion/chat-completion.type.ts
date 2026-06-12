@@ -1,13 +1,7 @@
-import type { OpenAIChatCompletionResponse } from "../../shared/signatures";
+import type { ChatCompletionErrorResponse, OpenAIChatCompletionResponse } from "../../shared/signatures";
 
-export type ChatCompletionErrorResponse = {
-  error: {
-    message: string;
-    type: string;
-    code: string;
-  };
-};
-
+/** A chat completion response that is either a successful OpenAI response or an error shape. */
 export type ChatCompletionResponse = OpenAIChatCompletionResponse | ChatCompletionErrorResponse;
 
+/** Route path for the chat completion endpoint. */
 export const ROUTE_PATH = "/v1/chat/completions";

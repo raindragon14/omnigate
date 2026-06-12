@@ -11,7 +11,9 @@ const EXPECTED_MODEL_IDS = [
   "omnigate/emergency-paid",
 ];
 
+/** Unit tests for the model feature. */
 describe("model feature", () => {
+  /** Should return the list of router model aliases with correct structure. */
   test("lists router model aliases", () => {
     const modelList = listRouterModels();
 

@@ -9,7 +9,9 @@ const EXPECTED_HEALTH_RESPONSE = {
   service: "omnigate",
 };
 
+/** Integration tests for the GET /health endpoint. */
 describe("health integration", () => {
+  /** Should return 200 with ok status and the service name. */
   test("handles GET /health", async () => {
     const app = createApp();
     const response = await app.request(HEALTH_ROUTE_PATH);
