@@ -1,4 +1,23 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
+
+// ===========================================================================
+// Constants
+// ===========================================================================
+
+/** Default port used when the PORT environment variable is not set. */
+export declare const DEFAULT_PORT: 8787;
+
+/** HTTP 200 OK. */
+export declare const HTTP_STATUS_OK: 200;
+/** HTTP 400 Bad Request. */
+export declare const HTTP_STATUS_BAD_REQUEST: 400;
+/** HTTP 404 Not Found. */
+export declare const HTTP_STATUS_NOT_FOUND: 404;
+/** HTTP 500 Internal Server Error. */
+export declare const HTTP_STATUS_INTERNAL_SERVER_ERROR: 500;
+
+/** Route path for the chat completion endpoint. */
+export declare const ROUTE_PATH: "/v1/chat/completions";
 
 /** Service operational status indicator. */
 export type ServiceStatus = "ok" | "degraded";
@@ -278,6 +297,9 @@ export type ChatCompletionErrorResponse = {
   };
 };
 
+/** A chat completion response that is either a successful OpenAI response or an error shape. */
+export type ChatCompletionResponse = OpenAIChatCompletionResponse | ChatCompletionErrorResponse;
+
 /**
  * Routes a chat completion request through the best available provider.
  * Orchestrates request normalisation, provider selection, API key resolution,
@@ -288,3 +310,57 @@ export type ChatCompletionErrorResponse = {
  *   or the upstream provider returns a non-200 status.
  */
 export declare function routeChatCompletion(chatRequest: OpenAIChatRequest): Promise<OpenAIChatCompletionResponse>;
+
+// ---------------------------------------------------------------------------
+// Routing & selection
+// ---------------------------------------------------------------------------
+
+/**
+ * Custom error with a machine-readable code that the controller uses to
+ * determine the appropriate HTTP status code (400 vs 500).
+ * @param code    Machine-readable error code.
+ * @param message Human-readable error description.
+ */
+export declare class RoutingError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string);
+}
+
+/**
+ * Finds the best (highest priority) enabled provider that matches the given
+ * model alias.
+ * @param modelAlias  The model alias string (e.g. "omnigate/deepseek-v4-flash-auto").
+ * @param providers   The list of provider candidates to search.
+ * @param aliases     Alias configuration mapping alias names to family lists.
+ * @returns The best matching ProviderCandidate, or undefined when no match exists.
+ */
+export declare function selectBestProvider(
+  modelAlias: string,
+  providers: ProviderCandidate[],
+  aliases: Record<string, AliasConfig>,
+): ProviderCandidate | undefined;
+
+// ---------------------------------------------------------------------------
+// HTTP controllers
+// ---------------------------------------------------------------------------
+
+/**
+ * Handles GET /health requests.
+ * @param context  Hono request context.
+ * @returns A JSON Response with service liveness status.
+ */
+export declare function getHealthController(context: Context): Response;
+
+/**
+ * Handles GET /v1/models requests.
+ * @param context  Hono request context.
+ * @returns A JSON Response with the list of router model aliases.
+ */
+export declare function listModelController(context: Context): Response;
+
+/**
+ * Handles POST /v1/chat/completions requests.
+ * @param context  Hono request context.
+ * @returns A JSON Response containing either the completion or an error shape.
+ */
+export declare function handleChatCompletion(context: Context): Promise<Response>;
