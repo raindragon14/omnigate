@@ -12,13 +12,14 @@ curl http://localhost:8787/v1/chat/completions \
 [![Runtime](https://img.shields.io/badge/runtime-Bun-ff69b4?style=flat-square&logo=bun)](https://bun.sh)
 [![Stars](https://img.shields.io/github/stars/raindragon14/omnigate?style=flat-square)](https://github.com/raindragon14/omnigate)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker)](https://github.com/raindragon14/omnigate/pkgs/container/omnigate)
+[![Build](https://img.shields.io/github/actions/workflow/status/raindragon14/omnigate/docker-publish.yml?branch=master&style=flat-square&logo=github)](https://github.com/raindragon14/omnigate/actions)
 
 ## Quick Start
 
 **Docker (any machine):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/raindragon14/omnigate/main/deploy.sh | bash
+curl -fsSL https://raw.githubusercontent.com/raindragon14/omnigate/master/deploy.sh | bash
 ```
 
 **Or run locally with Bun:**
