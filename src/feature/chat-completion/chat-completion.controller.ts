@@ -4,7 +4,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { chatCompletionRequestSchema } from "./chat-completion.schema";
 import { routeChatCompletion, RoutingError } from "./chat-completion.service";
 import { HTTP_STATUS_BAD_REQUEST, HTTP_STATUS_INTERNAL_SERVER_ERROR } from "../../shared/http-status";
-import type { ChatCompletionResponse } from "./chat-completion.type";
+import type { ChatCompletionResponse } from "../../shared/signatures";
 
 const INVALID_REQUEST_CODE = "invalid_request";
 const INTERNAL_ERROR_CODE = "internal_server_error";
