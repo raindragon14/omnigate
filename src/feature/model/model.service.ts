@@ -9,7 +9,6 @@ const ROUTER_MODELS: RouterModel[] = [
   createRouterModel("omnigate/mimo-v2.5-auto"),
   createRouterModel("omnigate/coding-balanced"),
   createRouterModel("omnigate/coding-fast"),
-  createRouterModel("omnigate/emergency-paid"),
 ];
 
 /**

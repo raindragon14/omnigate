@@ -1,37 +1,51 @@
 import { readFileSync } from "fs";
 import { parse } from "yaml";
 import { join } from "path";
+import { z } from "zod";
 
 import type { AliasConfig, ProviderCandidate, ProviderRateLimit, ProviderRegistry } from "../shared/signatures";
 
 const PROVIDER_REGISTRY_PATH = "provider.registry.yaml";
+const MIN_SCORE = 0;
+const MAX_SCORE = 100;
+const REGISTRY_ERROR_PREFIX = "Invalid provider registry";
 
-type RawRateLimit = {
-  rpm?: number;
-  rph?: number;
-  rpd?: number;
-};
+const rateLimitSchema = z.object({
+  rpm: z.number().int().positive().optional(),
+  rph: z.number().int().positive().optional(),
+  rpd: z.number().int().positive().optional(),
+});
 
-type RawProvider = {
-  id: string;
-  base_url: string;
-  model: string;
-  api_key_env: string;
-  family: string;
-  priority: number;
-  enabled: boolean;
-  paid_fallback?: boolean;
-  context?: number;
-  supports_tools?: boolean;
-  supports_json?: boolean;
-  supports_streaming?: boolean;
-  rate_limit?: RawRateLimit;
-};
+const aliasSchema = z.object({
+  families: z.array(z.string().min(1)).min(1),
+  allow_paid: z.boolean().optional(),
+});
 
-type RawRegistry = {
-  providers: RawProvider[];
-  aliases: Record<string, AliasConfig>;
-};
+const providerSchema = z.object({
+  id: z.string().min(1),
+  base_url: z.string().url(),
+  model: z.string().min(1),
+  api_key_env: z.string().min(1),
+  family: z.string().min(1),
+  priority: z.number().int(),
+  quality_score: z.number().min(MIN_SCORE).max(MAX_SCORE),
+  speed_score: z.number().min(MIN_SCORE).max(MAX_SCORE).optional(),
+  enabled: z.boolean(),
+  paid_fallback: z.boolean().optional(),
+  context: z.number().int().nonnegative().optional(),
+  supports_tools: z.boolean().optional(),
+  supports_json: z.boolean().optional(),
+  supports_streaming: z.boolean().optional(),
+  rate_limit: rateLimitSchema.optional(),
+});
+
+const registrySchema = z.object({
+  providers: z.array(providerSchema),
+  aliases: z.record(aliasSchema),
+});
+
+type RawRateLimit = z.infer<typeof rateLimitSchema>;
+type RawProvider = z.infer<typeof providerSchema>;
 
 let cachedRegistry: ProviderRegistry | undefined;
 
@@ -47,14 +61,30 @@ export function loadProviderRegistry(): ProviderRegistry {
 
   const filePath = join(import.meta.dir, PROVIDER_REGISTRY_PATH);
   const raw = readFileSync(filePath, "utf-8");
-  const parsed = parse(raw) as RawRegistry;
+  const parsed = parse(raw) as unknown;
 
-  cachedRegistry = {
-    providers: parsed.providers.map(toProviderCandidate),
-    aliases: parsed.aliases,
-  };
+  cachedRegistry = parseProviderRegistry(parsed);
 
   return cachedRegistry;
+}
+
+/**
+ * Validates and converts raw provider registry data into routing candidates.
+ * @param rawRegistry  Parsed YAML registry data with unknown shape.
+ * @returns A typed ProviderRegistry ready for routing.
+ * @throws {Error} When the registry shape is invalid.
+ */
+export function parseProviderRegistry(rawRegistry: unknown): ProviderRegistry {
+  const result = registrySchema.safeParse(rawRegistry);
+
+  if (!result.success) {
+    throw new Error(formatRegistryError(result.error));
+  }
+
+  return {
+    providers: result.data.providers.map(toProviderCandidate),
+    aliases: result.data.aliases,
+  };
 }
 
 /**
@@ -93,6 +123,8 @@ function toProviderCandidate(raw: RawProvider): ProviderCandidate {
     model: raw.model,
     family: raw.family,
     priority: raw.priority,
+    qualityScore: raw.quality_score,
+    speedScore: raw.speed_score,
     enabled: raw.enabled,
     paidFallback: raw.paid_fallback ?? false,
     apiKeyEnv: raw.api_key_env,
@@ -102,4 +134,14 @@ function toProviderCandidate(raw: RawProvider): ProviderCandidate {
     supportsStreaming: raw.supports_streaming ?? true,
     rateLimit: toRateLimit(raw.rate_limit),
   };
+}
+
+function formatRegistryError(error: z.ZodError): string {
+  const issue = error.issues[0];
+
+  if (issue === undefined) {
+    return REGISTRY_ERROR_PREFIX;
+  }
+
+  return `${REGISTRY_ERROR_PREFIX}: ${issue.path.join(".") || "root"} ${issue.message}`;
 }

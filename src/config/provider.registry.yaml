@@ -5,10 +5,13 @@ providers:
     api_key_env: "OPENCODE_API_KEY"
     family: "deepseek-v4-flash"
     priority: 100
+    quality_score: 90
+    speed_score: 85
     enabled: true
     context: 200000
     supports_tools: true
     supports_json: true
+    supports_streaming: true
     rate_limit:
       rpm: 10
 
@@ -18,10 +21,13 @@ providers:
     api_key_env: "OPENCODE_API_KEY"
     family: "mimo-v2.5"
     priority: 98
+    quality_score: 82
+    speed_score: 90
     enabled: true
     context: 200000
     supports_tools: true
     supports_json: true
+    supports_streaming: true
     rate_limit:
       rpm: 10
 
@@ -31,60 +37,16 @@ providers:
     api_key_env: "OPENROUTER_API_KEY"
     family: "deepseek-v4-flash"
     priority: 90
+    quality_score: 86
+    speed_score: 80
     enabled: true
     context: 1000000
     supports_tools: true
     supports_json: true
+    supports_streaming: true
     rate_limit:
       rpm: 20
       rpd: 50
-
-  - id: kilo_deepseek_free
-    base_url: "https://api.kilo.ai/api/gateway"
-    model: "kilo/deepseek/deepseek-v4-flash:free"
-    api_key_env: "KILO_API_KEY"
-    family: "deepseek-v4-flash"
-    priority: 85
-    enabled: true
-    context: 1000000
-    supports_tools: true
-    supports_json: true
-    rate_limit:
-      rph: 200
-
-  - id: hf_deepseek
-    base_url: "https://router.huggingface.co/v1"
-    model: "deepseek-ai/DeepSeek-V4-Flash"
-    api_key_env: "HF_TOKEN"
-    family: "deepseek-v4-flash"
-    priority: 70
-    enabled: true
-    context: 1000000
-    supports_tools: false
-    supports_json: false
-
-  - id: nous_deepseek_free
-    base_url: "https://portal.nousresearch.com/v1"
-    model: "deepseek/deepseek-v4-flash:free"
-    api_key_env: "NOUS_API_KEY"
-    family: "deepseek-v4-flash"
-    priority: 60
-    enabled: false
-    context: 1000000
-    supports_tools: false
-    supports_json: false
-
-  - id: deepseek_official_fallback
-    base_url: "https://api.deepseek.com"
-    model: "deepseek-v4-flash"
-    api_key_env: "DEEPSEEK_API_KEY"
-    family: "deepseek-v4-flash"
-    priority: 40
-    enabled: true
-    paid_fallback: true
-    context: 1000000
-    supports_tools: true
-    supports_json: true
 
 aliases:
   omnigate/deepseek-v4-flash-auto:
@@ -95,6 +57,3 @@ aliases:
     families: ["deepseek-v4-flash", "mimo-v2.5"]
   omnigate/coding-fast:
     families: ["mimo-v2.5", "deepseek-v4-flash"]
-  omnigate/emergency-paid:
-    families: ["deepseek-v4-flash"]
-    allow_paid: true

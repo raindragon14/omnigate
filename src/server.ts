@@ -3,8 +3,8 @@ import { serve } from "bun";
 import { createApp } from "./app";
 import { loadAppConfig } from "./config/config-loader";
 
-const app = createApp();
 const appConfig = loadAppConfig();
+const app = createApp(appConfig);
 
 serve({
   fetch: app.fetch,

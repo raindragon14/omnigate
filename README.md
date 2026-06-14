@@ -1,10 +1,13 @@
 # OmniGate
 
-Self-hosted OpenAI-compatible gateway that unifies every LLM provider behind one endpoint — on your machine, with your keys.
+Local free-model routing gateway for OpenCode.
 
-```
+OmniGate pools a small set of reliable free providers behind one OpenAI-compatible base URL. The initial target is OpenCode Zen plus OpenRouter free models, with routing that favors speed, coding quality, quota availability, and fast first response.
+
+```bash
 curl http://localhost:8787/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OMNIGATE_API_KEY" \
   -d '{"model": "omnigate/deepseek-v4-flash-auto", "messages": [{"role": "user", "content": "Sorting algorithm in Rust"}]}'
 ```
 
@@ -16,19 +19,20 @@ curl http://localhost:8787/v1/chat/completions \
 
 ## Quick Start
 
-**Docker (any machine):**
+Docker:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/raindragon14/omnigate/master/deploy.sh | bash
 ```
 
-**Or run locally with Bun:**
+Local development:
 
 ```bash
 git clone https://github.com/raindragon14/omnigate
 cd omnigate
-cp .env.example .env    # add your API keys
-bun install && bun run dev
+cp .env.example .env
+bun install
+bun run dev
 ```
 
 OpenCode config:
@@ -39,68 +43,116 @@ OpenCode config:
   "provider": {
     "omnigate": {
       "name": "OmniGate",
-      "options": { "baseURL": "http://localhost:8787/v1" }
+      "options": {
+        "baseURL": "http://localhost:8787/v1",
+        "apiKey": "YOUR_OMNIGATE_API_KEY"
+      }
     }
   }
 }
 ```
 
-## Features
+## Product Focus
 
-| | |
-|---|---|
-| **Smart routing** | Scores providers on quality, latency, quota, availability, throughput, and feature match. Picks the best one per request. |
-| **Automatic fallback** | 429, 5xx, or timeout? Silently retries the next-best provider. |
-| **Quota-aware** | Tracks remaining free tier across all providers. Routes to the one with the most runway. |
-| **Privacy mode** | Strict mode blocks sensitive prompts from free/trial providers that may use data for training. |
-| **Cost guardrails** | Paid fallback is off by default. Hard monthly cap prevents bill shock. |
-| **Streaming** | SSE streaming normalized to OpenAI-compatible format. |
+OmniGate is not a general provider marketplace. It is a local free-provider pool for coding workflows.
+
+In scope:
+
+- OpenCode Zen and OpenRouter free models.
+- One OpenAI-compatible base URL.
+- One OmniGate API key for clients.
+- Server-side provider API keys from environment variables.
+- Automatic fallback across eligible free providers.
+- Simple SQLite stats for speed, quota, latency, failures, and cooldowns.
+
+Out of scope:
+
+- Paid fallback.
+- Admin dashboard.
+- Multi-user auth or billing.
+- Provider marketplace.
+- Automated quality benchmarking.
+
+## Current Capabilities
+
+Implemented now:
+
+| Capability | Status |
+| --- | --- |
+| Health check | `GET /health` |
+| Model aliases | `GET /v1/models` |
+| Chat completions | `POST /v1/chat/completions` |
+| OmniGate API key auth | Required for `/v1/*` |
+| Provider registry | YAML config in `src/config/provider.registry.yaml` |
+| Provider filtering | Alias family, enabled flag, API key, paid fallback flag, cooldown, and feature support |
+| Provider ranking | Stats-aware speed, quality, quota, latency, and reliability scoring |
+| Fallback | Handles `429`, `5xx`, timeout, network error, and malformed response |
+| Adapter | Generic OpenAI-compatible adapter |
+| SQLite provider stats | Stores routing signals in `OMNIGATE_DB_PATH` |
+| Persisted cooldowns | Restored before provider selection |
+| Streaming | OpenAI-compatible SSE pass-through for `stream: true` |
+| First-token timing | Persists average time-to-first-token for streamed responses |
+
+Next planned:
+
+- Hardening from real provider usage and deferred extensions as needed.
 
 ## Model Aliases
 
-| Alias | Routes to |
-|---|---|
-| `omnigate/deepseek-v4-flash-auto` | DeepSeek V4 Flash via best free provider |
-| `omnigate/mimo-v2.5-auto` | MiMo V2.5 via best free provider |
-| `omnigate/coding-balanced` | Best all-rounder coding model |
-| `omnigate/coding-fast` | Fastest coding model |
-| `omnigate/emergency-paid` | Paid fallback (off by default) |
+Target aliases:
 
-## Providers
+| Alias | Intent |
+| --- | --- |
+| `omnigate/deepseek-v4-flash-auto` | Best current free DeepSeek-compatible provider. |
+| `omnigate/mimo-v2.5-auto` | Best current free MiMo provider when available. |
+| `omnigate/coding-balanced` | Best current free coding provider with speed-first scoring and quality guardrails. |
+| `omnigate/coding-fast` | Fastest useful free coding provider. |
 
-| Provider | Access | Cost Model | Est. Rate Limits |
-|---|---|---|---|
-| OpenCode Zen | API key | Free (limited period) | 5-10 RPM |
-| OpenCode Zen (MiMo) | API key | Free (limited period) | 5-10 RPM |
-| OpenRouter | API key | Free | ~20 RPM |
-| Kilo Gateway | API key | Free (verified account) | ~200 RPH |
-| Hugging Face | HF Token | Small monthly credit | Conservative |
-| Nous Portal | API key | Free (manual verify) | Unknown |
-| DeepSeek (paid) | API key | $0.14/$0.28 per 1M tokens | Standard |
+## Routing Strategy
+
+Provider choice should optimize in this order:
+
+1. Speed.
+2. Coding quality.
+3. Quota availability.
+4. Fast first response or first token.
+
+`70 tokens/second` is a target, not a hard requirement. If every free provider is slower, OmniGate should still choose the best available free option.
 
 ## Security
 
-API keys live in your `.env`, loaded into `process.env`, and sent directly to your chosen provider. OmniGate never stores, logs, or transmits them anywhere else.
-
-| Concern | How OmniGate handles it |
-|---|---|
-| **API keys** | Read from `process.env` only. Never logged, never stored in SQLite, never sent to any OmniGate server (there is none). |
-| **Prompt data** | Stays in memory during request processing. Never sent to a third-party server except the intended provider. |
-| **Telemetry** | Zero. No analytics, no crash reporting, no phone-home. The project has no backend. |
-| **Database** | Local SQLite file contains usage metrics and provider state only — never API keys or prompt content. |
+| Concern | Handling |
+| --- | --- |
+| OmniGate API key | Read from `OMNIGATE_API_KEY`; required for `/v1/*` after Sprint 4. |
+| Provider API keys | Read from provider-specific environment variables only. |
+| Prompt data | Kept in memory during request handling. Not persisted. |
+| Completion data | Returned to the client. Not persisted. |
+| SQLite | Stores routing stats only in `.data/omnigate.sqlite` by default, never secrets or content. |
+| Streaming | Passes provider SSE bytes through without storing chunks. |
+| Paid providers | Out of scope. |
 
 ## Architecture
 
-```
-Client → HTTP (Hono) → Feature Layer → Router Core → Policies → Provider Adapter → Provider API
+```text
+Client -> Hono route -> feature service -> router core -> provider adapter -> provider API
 ```
 
-The router processes requests through five stages: **normalize** (clean input), **filter** (remove invalid providers), **score** (rank by quality/latency/quota), **execute** (send to best candidate), and **fallback** (retry next on failure). Each provider is accessed through an adapter that handles API-specific quirks without leaking into routing logic.
+Near-term routing memory:
+
+```text
+router core <-> SQLite provider_stats
+```
+
+The ignored local docs contain the working product and design notes:
+
+- `docs/PRD.md`
+- `docs/SDS.md`
+- `docs/SPRINT_BREAKDOWN.md`
 
 ## Scripts
 
 | Command | Purpose |
-|---|---|
+| --- | --- |
 | `bun run dev` | Start with watch mode |
 | `bun test` | Run all tests |
 | `bun run typecheck` | TypeScript check |

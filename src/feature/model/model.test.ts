@@ -8,7 +8,6 @@ const EXPECTED_MODEL_IDS = [
   "omnigate/mimo-v2.5-auto",
   "omnigate/coding-balanced",
   "omnigate/coding-fast",
-  "omnigate/emergency-paid",
 ];
 
 /** Unit tests for the model feature. */

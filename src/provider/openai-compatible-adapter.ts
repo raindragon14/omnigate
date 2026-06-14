@@ -1,4 +1,4 @@
-import type { ProviderCandidate, ProviderRequest, ProviderResponse, RouterRequest } from "../shared/signatures";
+import type { ProviderCandidate, ProviderRequest, ProviderResponse, ProviderStreamResponse, RouterRequest } from "../shared/signatures";
 import type { ProviderAdapter } from "./provider-adapter";
 
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
@@ -17,6 +17,7 @@ export function createOpenAiCompatibleAdapter(): ProviderAdapter {
     supports: isSupported,
     transformRequest: buildProviderRequest,
     send: sendProviderRequest,
+    sendStream: sendProviderStreamRequest,
   };
 }
 
@@ -69,6 +70,19 @@ async function sendProviderRequest(providerRequest: ProviderRequest): Promise<Pr
   }
 }
 
+async function sendProviderStreamRequest(providerRequest: ProviderRequest): Promise<ProviderStreamResponse> {
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), DEFAULT_TIMEOUT_MS);
+
+  try {
+    const response = await fetchProviderResponse(providerRequest, abortController);
+
+    return toProviderStreamResponse(response);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function fetchProviderResponse(providerRequest: ProviderRequest, abortController: AbortController): Promise<Response> {
   return fetch(providerRequest.url, {
     method: "POST",
@@ -97,6 +111,14 @@ function collectResponseHeaders(response: Response): Record<string, string> {
   });
 
   return headers;
+}
+
+function toProviderStreamResponse(response: Response): ProviderStreamResponse {
+  return {
+    status: response.status,
+    headers: collectResponseHeaders(response),
+    stream: response.body ?? undefined,
+  };
 }
 
 async function parseResponseBody(response: Response): Promise<{ body: Record<string, unknown>; isMalformed: boolean }> {

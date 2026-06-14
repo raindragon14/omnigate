@@ -2,6 +2,8 @@
 export const HTTP_STATUS_OK = 200;
 /** HTTP 400 Bad Request. */
 export const HTTP_STATUS_BAD_REQUEST = 400;
+/** HTTP 401 Unauthorized. */
+export const HTTP_STATUS_UNAUTHORIZED = 401;
 /** HTTP 429 Too Many Requests. */
 export const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
 /** HTTP 404 Not Found. */

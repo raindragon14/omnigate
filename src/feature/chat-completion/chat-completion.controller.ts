@@ -4,12 +4,17 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { chatCompletionRequestSchema } from "./chat-completion.schema";
 import { routeChatCompletion, RoutingError } from "./chat-completion.service";
 import { HTTP_STATUS_BAD_REQUEST, HTTP_STATUS_INTERNAL_SERVER_ERROR } from "../../shared/http-status";
-import type { ChatCompletionResponse } from "../../shared/signatures";
+import type { ChatCompletionResponse, OpenAIChatStreamResponse } from "../../shared/signatures";
 
 const INVALID_REQUEST_CODE = "invalid_request";
 const INTERNAL_ERROR_CODE = "internal_server_error";
 const INTERNAL_ERROR_MESSAGE = "Internal server error";
 const MALFORMED_JSON_MESSAGE = "Malformed JSON request body";
+const STREAM_RESPONSE_HEADERS = {
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache",
+  Connection: "keep-alive",
+};
 
 const CLIENT_ERROR_CODES = new Set(["no_provider_available", "no_api_key"]);
 
@@ -36,9 +41,13 @@ export async function handleChatCompletion(context: Context): Promise<Response> 
   }
 
   try {
-    const response = await routeChatCompletion(parseResult.data);
+    const result = await routeChatCompletion(parseResult.data);
 
-    return context.json(response);
+    if (result.type === "stream") {
+      return sendStreamResponse(result.response);
+    }
+
+    return context.json(result.response);
   } catch (error) {
     if (error instanceof RoutingError && CLIENT_ERROR_CODES.has(error.code)) {
       return sendBadRequestError(context, error.message);
@@ -48,6 +57,10 @@ export async function handleChatCompletion(context: Context): Promise<Response> 
 
     return sendInternalError(context, message);
   }
+}
+
+function sendStreamResponse(response: OpenAIChatStreamResponse): Response {
+  return new Response(response.stream, { headers: STREAM_RESPONSE_HEADERS });
 }
 
 function sendBadRequestError(context: Context, message: string): Response {

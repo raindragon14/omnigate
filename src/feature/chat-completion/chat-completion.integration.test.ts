@@ -2,22 +2,25 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import type { Hono } from "hono";
 
 import { createApp } from "../../app";
-import { HTTP_STATUS_BAD_REQUEST } from "../../shared/http-status";
+import { DEFAULT_PORT } from "../../config/config-loader";
+import { HTTP_STATUS_BAD_REQUEST, HTTP_STATUS_UNAUTHORIZED } from "../../shared/http-status";
 
 const CHAT_COMPLETION_PATH = "/v1/chat/completions";
+const TEST_OMNIGATE_API_KEY = "test-omnigate-key";
+const AUTH_HEADERS = {
+  Authorization: `Bearer ${TEST_OMNIGATE_API_KEY}`,
+  "Content-Type": "application/json",
+};
+const TEST_APP_CONFIG = { port: DEFAULT_PORT, omnigateApiKey: TEST_OMNIGATE_API_KEY, databasePath: ":memory:" };
 const PROVIDER_API_KEY_ENV_NAMES = [
   "OPENCODE_API_KEY",
   "OPENROUTER_API_KEY",
-  "KILO_API_KEY",
-  "HF_TOKEN",
-  "NOUS_API_KEY",
-  "DEEPSEEK_API_KEY",
 ];
 
 let app: Hono;
 
 beforeAll(() => {
-  app = createApp();
+  app = createApp(TEST_APP_CONFIG);
 });
 
 /** Integration tests for the POST /v1/chat/completions endpoint. */
@@ -26,7 +29,7 @@ describe("chat completion integration", () => {
   test("returns 400 for empty body", async () => {
     const response = await app.request(CHAT_COMPLETION_PATH, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({}),
     });
 
@@ -37,7 +40,7 @@ describe("chat completion integration", () => {
   test("returns 400 for missing model", async () => {
     const response = await app.request(CHAT_COMPLETION_PATH, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
     });
 
@@ -48,7 +51,7 @@ describe("chat completion integration", () => {
   test("returns 400 for empty messages", async () => {
     const response = await app.request(CHAT_COMPLETION_PATH, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({ model: "test", messages: [] }),
     });
 
@@ -59,7 +62,7 @@ describe("chat completion integration", () => {
   test("rejects invalid role", async () => {
     const response = await app.request(CHAT_COMPLETION_PATH, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({ model: "test", messages: [{ role: "invalid", content: "hi" }] }),
     });
 
@@ -71,7 +74,7 @@ describe("chat completion integration", () => {
     const response = await withClearedProviderApiKeys(async () => {
       return app.request(CHAT_COMPLETION_PATH, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: AUTH_HEADERS,
         body: JSON.stringify({
           model: "omnigate/deepseek-v4-flash-auto",
           messages: [{ role: "user", content: "hi" }],
@@ -84,6 +87,28 @@ describe("chat completion integration", () => {
     const body = await response.json();
 
     expect(body.error).toBeDefined();
+  });
+
+  /** Should require OmniGate API key auth before request validation. */
+  test("returns 401 for missing auth", async () => {
+    const response = await app.request(CHAT_COMPLETION_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_UNAUTHORIZED);
+  });
+
+  /** Should reject an incorrect OmniGate API key. */
+  test("returns 401 for invalid auth", async () => {
+    const response = await app.request(CHAT_COMPLETION_PATH, {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, Authorization: "Bearer wrong-key" },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_UNAUTHORIZED);
   });
 });
 

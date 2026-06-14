@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import type { Database } from "bun:sqlite";
 
 // ===========================================================================
 // Constants
@@ -6,11 +7,15 @@ import type { Context, Hono } from "hono";
 
 /** Default port used when the PORT environment variable is not set. */
 export declare const DEFAULT_PORT: 8787;
+/** Default SQLite path used when OMNIGATE_DB_PATH is not set. */
+export declare const DEFAULT_DATABASE_PATH: ".data/omnigate.sqlite";
 
 /** HTTP 200 OK. */
 export declare const HTTP_STATUS_OK: 200;
 /** HTTP 400 Bad Request. */
 export declare const HTTP_STATUS_BAD_REQUEST: 400;
+/** HTTP 401 Unauthorized. */
+export declare const HTTP_STATUS_UNAUTHORIZED: 401;
 /** HTTP 429 Too Many Requests. */
 export declare const HTTP_STATUS_TOO_MANY_REQUESTS: 429;
 /** HTTP 404 Not Found. */
@@ -32,6 +37,8 @@ export type Result<TValue, TError = AppError> =
 /** Application-level runtime configuration. */
 export interface AppConfig {
   port: number;
+  omnigateApiKey: string;
+  databasePath: string;
 }
 
 /** Response body for the GET /health endpoint. */
@@ -68,7 +75,7 @@ export interface AppError {
  * Creates and configures the Hono application with all feature routes
  * (health, models, chat completions) and global error handling.
  */
-export declare function createApp(): Hono;
+export declare function createApp(appConfig?: AppConfig): Hono;
 
 /**
  * Loads AppConfig from the runtime environment (Bun.env).
@@ -90,6 +97,13 @@ export declare function parseAppConfig(environment: Record<string, string | unde
  * @param app  The Hono application instance.
  */
 export declare function registerAppErrorHandler(app: Hono): void;
+
+/**
+ * Registers Bearer-token authentication for OpenAI-compatible /v1 routes.
+ * @param app     The Hono application instance.
+ * @param apiKey  The expected OmniGate API key.
+ */
+export declare function registerApiKeyAuth(app: Hono, apiKey: string): void;
 
 /**
  * Registers the GET /health route.
@@ -198,6 +212,8 @@ export type ProviderCandidate = {
   model: string;
   family: string;
   priority: number;
+  qualityScore: number;
+  speedScore?: number | undefined;
   enabled: boolean;
   paidFallback: boolean;
   apiKeyEnv: string;
@@ -235,6 +251,79 @@ export type ProviderResponse = {
   isMalformed?: boolean | undefined;
 };
 
+/** Shape of an upstream streaming provider response before body consumption. */
+export type ProviderStreamResponse = {
+  status: number;
+  headers: Record<string, string>;
+  stream?: ReadableStream<Uint8Array> | undefined;
+};
+
+/** Provider attempt status persisted as local routing stats. */
+export type ProviderAttemptStatus = "success" | "failure" | "rate_limited";
+
+/** Persisted routing signals for a provider/model/day tuple. */
+export type ProviderStatsRecord = {
+  providerId: string;
+  modelFamily: string;
+  day: string;
+  requestCount: number;
+  tokenCount: number;
+  successCount: number;
+  failureCount: number;
+  rateLimitCount: number;
+  avgLatencyMs?: number | undefined;
+  avgTokensPerSecond?: number | undefined;
+  avgTimeToFirstTokenMs?: number | undefined;
+  cooldownUntil?: number | undefined;
+};
+
+/** Provider attempt update stored after an upstream call completes or fails. */
+export type ProviderStatsUpdate = {
+  providerId: string;
+  modelFamily: string;
+  status: ProviderAttemptStatus;
+  latencyMs: number;
+  tokenCount?: number | undefined;
+  tokensPerSecond?: number | undefined;
+  timeToFirstTokenMs?: number | undefined;
+  cooldownUntil?: number | undefined;
+  nowMs: number;
+};
+
+/** Repository for local provider routing signals. */
+export interface ProviderStatsRepository {
+  getProviderStats(providerId: string, modelFamily: string, day: string): ProviderStatsRecord | undefined;
+  recordProviderAttempt(update: ProviderStatsUpdate): void;
+  getCooldownUntil(providerId: string, modelFamily: string): number | undefined;
+}
+
+/**
+ * Opens a SQLite database and creates its parent directory when file-backed.
+ * @param databasePath  SQLite database path or `:memory:` for tests.
+ * @returns An open Bun SQLite Database instance.
+ */
+export declare function createSqliteDatabase(databasePath: string): Database;
+
+/**
+ * Applies idempotent SQLite schema migrations required by OmniGate.
+ * @param database  Open SQLite database connection.
+ */
+export declare function migrateSqliteDatabase(database: Database): void;
+
+/**
+ * Creates a provider stats repository backed by SQLite.
+ * @param database  Open SQLite database connection.
+ * @returns A ProviderStatsRepository instance.
+ */
+export declare function createProviderStatsRepository(database: Database): ProviderStatsRepository;
+
+/**
+ * Formats a timestamp as the UTC day key used by provider stats rows.
+ * @param nowMs  Timestamp in milliseconds.
+ * @returns A YYYY-MM-DD UTC day string.
+ */
+export declare function formatStatsDay(nowMs: number): string;
+
 /** A standard OpenAI-compatible chat completion response. */
 export type OpenAIChatCompletionResponse = {
   id: string;
@@ -256,12 +345,31 @@ export type OpenAIChatCompletionResponse = {
   };
 };
 
+/** Streaming chat response passed through as OpenAI-compatible SSE bytes. */
+export type OpenAIChatStreamResponse = {
+  stream: ReadableStream<Uint8Array>;
+  headers: Record<string, string>;
+};
+
+/** Route result for either JSON completion or streaming SSE completion. */
+export type ChatCompletionRouteResult =
+  | { type: "json"; response: OpenAIChatCompletionResponse }
+  | { type: "stream"; response: OpenAIChatStreamResponse };
+
 /**
  * Loads and parses provider.registry.yaml into a typed ProviderRegistry.
  * The result is cached after the first call to avoid repeated disk I/O.
  * @returns The parsed provider registry.
  */
 export declare function loadProviderRegistry(): ProviderRegistry;
+
+/**
+ * Validates and converts raw provider registry data into routing candidates.
+ * @param rawRegistry  Parsed YAML registry data with unknown shape.
+ * @returns A typed ProviderRegistry ready for routing.
+ * @throws {Error} When the registry shape is invalid.
+ */
+export declare function parseProviderRegistry(rawRegistry: unknown): ProviderRegistry;
 
 /**
  * Resets the cached provider registry so the next call to loadProviderRegistry
@@ -283,6 +391,19 @@ export declare function normalizeRequest(request: OpenAIChatRequest): RouterRequ
  */
 export declare function registerChatCompletionRoute(app: Hono): void;
 
+/**
+ * Configures the SQLite database path used for chat-completion routing stats.
+ * @param databasePath  SQLite database path from AppConfig.
+ */
+export declare function configureChatCompletionStorage(databasePath: string): void;
+
+/**
+ * Routes a chat completion request through the best available provider.
+ * @param chatRequest  The validated OpenAI-compatible chat request.
+ * @returns A JSON completion result or streaming SSE pass-through result.
+ */
+export declare function routeChatCompletion(chatRequest: OpenAIChatRequest): Promise<ChatCompletionRouteResult>;
+
 // ---------------------------------------------------------------------------
 // Provider adapters
 // ---------------------------------------------------------------------------
@@ -297,6 +418,8 @@ export interface ProviderAdapter {
   transformRequest(request: RouterRequest, provider: ProviderCandidate, apiKey: string): ProviderRequest;
   /** Sends the provider request over HTTP and returns the raw response. */
   send(request: ProviderRequest): Promise<ProviderResponse>;
+  /** Sends the provider request over HTTP and returns an unconsumed stream response. */
+  sendStream(request: ProviderRequest): Promise<ProviderStreamResponse>;
 }
 
 /**
@@ -377,25 +500,37 @@ export type ProviderScore = {
   score: number;
 };
 
-/**
- * Computes a numeric score for a single provider candidate based on priority,
- * mode, and feature match.
- * @param request   The normalised router request.
- * @param provider  The provider candidate to score.
- * @returns A ProviderScore with providerId and score.
- */
-export declare function scoreProvider(request: RouterRequest, provider: ProviderCandidate): ProviderScore;
+/** Stats lookup used by provider scoring, keyed by provider id. */
+export type ProviderStatsById = Record<string, ProviderStatsRecord | undefined>;
+
+/** Input for scoring a single provider candidate. */
+export type ProviderScoringInput = {
+  request: RouterRequest;
+  provider: ProviderCandidate;
+  stats?: ProviderStatsRecord | undefined;
+};
+
+/** Input for ranking provider candidates. */
+export type ProviderRankingInput = {
+  request: RouterRequest;
+  providers: ProviderCandidate[];
+  statsByProviderId?: ProviderStatsById | undefined;
+};
 
 /**
- * Ranks provider candidates by descending score, stable for equal scores.
- * @param request    The normalised router request.
- * @param providers  The list of eligible candidates.
+ * Computes a numeric score for a single provider candidate using configured
+ * scores, request mode, feature support, and optional persisted stats.
+ * @param input  Provider scoring inputs.
+ * @returns A ProviderScore with providerId and score.
+ */
+export declare function scoreProvider(input: ProviderScoringInput): ProviderScore;
+
+/**
+ * Ranks provider candidates by descending stats-aware score.
+ * @param input  Provider ranking inputs.
  * @returns The candidates sorted from highest to lowest score.
  */
-export declare function rankProviderCandidates(
-  request: RouterRequest,
-  providers: ProviderCandidate[],
-): ProviderCandidate[];
+export declare function rankProviderCandidates(input: ProviderRankingInput): ProviderCandidate[];
 
 /** In-memory cooldown store for tracking provider 429 cooldowns. */
 export interface ProviderCooldownStore {
@@ -429,6 +564,7 @@ export type FallbackRunnerInput = {
   adapter: ProviderAdapter;
   resolveApiKey: (apiKeyEnv: string) => string | undefined;
   cooldownStore: ProviderCooldownStore;
+  providerStatsRepository?: ProviderStatsRepository | undefined;
   nowMs: () => number;
 };
 
@@ -441,6 +577,15 @@ export type FallbackRunnerInput = {
  * @throws {RoutingError} When all providers fail.
  */
 export declare function runProviderFallback(input: FallbackRunnerInput): Promise<OpenAIChatCompletionResponse>;
+
+/**
+ * Routes a streaming request through providers, falling back only before a
+ * readable upstream stream is returned.
+ * @param input  Fallback runner parameters.
+ * @returns The first successful streaming response.
+ * @throws {RoutingError} When all providers fail before streaming starts.
+ */
+export declare function runProviderStreamFallback(input: FallbackRunnerInput): Promise<OpenAIChatStreamResponse>;
 
 /**
  * Classifies a provider HTTP response or error into a ProviderErrorCategory.

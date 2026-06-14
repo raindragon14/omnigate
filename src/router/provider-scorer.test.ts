@@ -1,60 +1,187 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ProviderCandidate, RouterRequest } from "../shared/signatures";
+import type { ProviderCandidate, ProviderStatsRecord, RouterRequest } from "../shared/signatures";
 import { rankProviderCandidates, scoreProvider } from "./provider-scorer";
 
-const FREE_HIGH: ProviderCandidate = { id: "alpha", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 90, enabled: true, paidFallback: false, apiKeyEnv: "", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} };
-const FREE_LOW: ProviderCandidate = { id: "beta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 80, enabled: true, paidFallback: false, apiKeyEnv: "", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} };
-const PAID: ProviderCandidate = { id: "gamma", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 50, enabled: true, paidFallback: true, apiKeyEnv: "", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} };
-const NO_TOOLS: ProviderCandidate = { id: "delta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 85, enabled: true, paidFallback: false, apiKeyEnv: "", context: 100000, supportsTools: false, supportsJson: true, supportsStreaming: true, rateLimit: {} };
+const FAMILY = "deepseek-v4-flash";
+const DAY = "2026-01-02";
+
+function makeProvider(overrides: Partial<ProviderCandidate> = {}): ProviderCandidate {
+  return {
+    id: "alpha",
+    baseUrl: "",
+    model: "",
+    family: FAMILY,
+    priority: 80,
+    qualityScore: 80,
+    speedScore: 80,
+    enabled: true,
+    paidFallback: false,
+    apiKeyEnv: "",
+    context: 100000,
+    supportsTools: true,
+    supportsJson: true,
+    supportsStreaming: true,
+    rateLimit: {},
+    ...overrides,
+  };
+}
 
 function makeRequest(overrides: Partial<RouterRequest> = {}): RouterRequest {
   return { messages: [], model: "test", stream: false, mode: "balanced", ...overrides };
 }
 
+function makeStats(overrides: Partial<ProviderStatsRecord> = {}): ProviderStatsRecord {
+  return {
+    providerId: "alpha",
+    modelFamily: FAMILY,
+    day: DAY,
+    requestCount: 10,
+    tokenCount: 1000,
+    successCount: 10,
+    failureCount: 0,
+    rateLimitCount: 0,
+    avgLatencyMs: 1000,
+    avgTokensPerSecond: 70,
+    ...overrides,
+  };
+}
+
 /** Unit tests for provider scoring and ranking. */
 describe("provider scoring", () => {
   describe("scoreProvider", () => {
-    test("higher priority scores higher", () => {
-      const high = scoreProvider(makeRequest(), FREE_HIGH);
-      const low = scoreProvider(makeRequest(), FREE_LOW);
+    test("uses configured speed score", () => {
+      const fast = scoreProvider({ request: makeRequest({ mode: "speed" }), provider: makeProvider({ speedScore: 90 }) });
+      const slow = scoreProvider({ request: makeRequest({ mode: "speed" }), provider: makeProvider({ speedScore: 40 }) });
 
-      expect(high.score).toBeGreaterThan(low.score);
+      expect(fast.score).toBeGreaterThan(slow.score);
     });
 
-    test("includes tiebreaker in score", () => {
-      const result = scoreProvider(makeRequest(), FREE_HIGH);
+    test("uses configured quality score", () => {
+      const strong = scoreProvider({ request: makeRequest({ mode: "quality" }), provider: makeProvider({ qualityScore: 95 }) });
+      const weak = scoreProvider({ request: makeRequest({ mode: "quality" }), provider: makeProvider({ qualityScore: 50 }) });
 
-      expect(result.score).toBeGreaterThan(FREE_HIGH.priority);
+      expect(strong.score).toBeGreaterThan(weak.score);
+    });
+
+    test("uses observed tokens per second when stats exist", () => {
+      const fast = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ avgTokensPerSecond: 90 }) });
+      const slow = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ avgTokensPerSecond: 20 }) });
+
+      expect(fast.score).toBeGreaterThan(slow.score);
+    });
+
+    test("uses lower latency as a positive signal", () => {
+      const quick = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ avgLatencyMs: 500 }) });
+      const delayed = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ avgLatencyMs: 2500 }) });
+
+      expect(quick.score).toBeGreaterThan(delayed.score);
+    });
+
+    test("penalizes high failure ratio", () => {
+      const reliable = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ failureCount: 0 }) });
+      const failing = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ failureCount: 8 }) });
+
+      expect(reliable.score).toBeGreaterThan(failing.score);
+    });
+
+    test("penalizes high rate-limit ratio", () => {
+      const available = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ rateLimitCount: 0 }) });
+      const limited = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ rateLimitCount: 8 }) });
+
+      expect(available.score).toBeGreaterThan(limited.score);
+    });
+
+    test("softens penalties for low sample counts", () => {
+      const lowSample = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ requestCount: 1, failureCount: 1 }) });
+      const fullSample = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ requestCount: 5, failureCount: 5 }) });
+
+      expect(lowSample.score).toBeGreaterThan(fullSample.score);
+    });
+
+    test("applies daily quota pressure when configured", () => {
+      const open = scoreProvider({ request: makeRequest(), provider: makeProvider({ rateLimit: { rpd: 100 } }), stats: makeStats({ requestCount: 10 }) });
+      const used = scoreProvider({ request: makeRequest(), provider: makeProvider({ rateLimit: { rpd: 100 } }), stats: makeStats({ requestCount: 90 }) });
+
+      expect(open.score).toBeGreaterThan(used.score);
+    });
+
+    test("keeps feature bonuses", () => {
+      const withTools = scoreProvider({ request: makeRequest({ tools: [{ type: "function" }] }), provider: makeProvider({ supportsTools: true }) });
+      const withoutTools = scoreProvider({ request: makeRequest({ tools: [{ type: "function" }] }), provider: makeProvider({ supportsTools: false }) });
+
+      expect(withTools.score).toBeGreaterThan(withoutTools.score);
     });
   });
 
   describe("rankProviderCandidates", () => {
-    test("places higher priority first", () => {
-      const ranked = rankProviderCandidates(makeRequest(), [FREE_LOW, FREE_HIGH]);
+    test("speed mode prefers faster observed provider", () => {
+      const fast = makeProvider({ id: "fast", speedScore: 70 });
+      const slow = makeProvider({ id: "slow", speedScore: 90 });
+      const ranked = rankProviderCandidates({
+        request: makeRequest({ mode: "speed" }),
+        providers: [slow, fast],
+        statsByProviderId: {
+          fast: makeStats({ providerId: "fast", avgTokensPerSecond: 90 }),
+          slow: makeStats({ providerId: "slow", avgTokensPerSecond: 10 }),
+        },
+      });
 
-      expect(ranked[0]!.id).toBe("alpha");
-      expect(ranked[1]!.id).toBe("beta");
+      expect(ranked[0]!.id).toBe("fast");
+    });
+
+    test("quality mode prefers higher quality provider", () => {
+      const highQuality = makeProvider({ id: "quality", qualityScore: 95, speedScore: 60 });
+      const highSpeed = makeProvider({ id: "speed", qualityScore: 50, speedScore: 95 });
+      const ranked = rankProviderCandidates({ request: makeRequest({ mode: "quality" }), providers: [highSpeed, highQuality] });
+
+      expect(ranked[0]!.id).toBe("quality");
+    });
+
+    test("balanced mode can promote provider with better measured speed", () => {
+      const opencode = makeProvider({ id: "opencode", speedScore: 85, qualityScore: 90 });
+      const openrouter = makeProvider({ id: "openrouter", speedScore: 80, qualityScore: 86 });
+      const ranked = rankProviderCandidates({
+        request: makeRequest(),
+        providers: [opencode, openrouter],
+        statsByProviderId: {
+          opencode: makeStats({ providerId: "opencode", avgTokensPerSecond: 20 }),
+          openrouter: makeStats({ providerId: "openrouter", avgTokensPerSecond: 90 }),
+        },
+      });
+
+      expect(ranked[0]!.id).toBe("openrouter");
+    });
+
+    test("survival mode prefers reliable provider", () => {
+      const reliable = makeProvider({ id: "reliable", qualityScore: 70, speedScore: 70 });
+      const failing = makeProvider({ id: "failing", qualityScore: 95, speedScore: 95 });
+      const ranked = rankProviderCandidates({
+        request: makeRequest({ mode: "survival" }),
+        providers: [failing, reliable],
+        statsByProviderId: {
+          reliable: makeStats({ providerId: "reliable", failureCount: 0, rateLimitCount: 0 }),
+          failing: makeStats({ providerId: "failing", failureCount: 8, rateLimitCount: 8 }),
+        },
+      });
+
+      expect(ranked[0]!.id).toBe("reliable");
+    });
+
+    test("missing stats still ranks by configured scores", () => {
+      const high = makeProvider({ id: "high", speedScore: 90, qualityScore: 90 });
+      const low = makeProvider({ id: "low", speedScore: 50, qualityScore: 50 });
+      const ranked = rankProviderCandidates({ request: makeRequest(), providers: [low, high] });
+
+      expect(ranked[0]!.id).toBe("high");
     });
 
     test("survival mode penalizes paid providers", () => {
-      const ranked = rankProviderCandidates(makeRequest({ mode: "survival" }), [PAID, FREE_LOW]);
+      const paid = makeProvider({ id: "paid", paidFallback: true, speedScore: 100, qualityScore: 100 });
+      const free = makeProvider({ id: "free", speedScore: 50, qualityScore: 50 });
+      const ranked = rankProviderCandidates({ request: makeRequest({ mode: "survival" }), providers: [paid, free] });
 
-      expect(ranked[0]!.id).toBe("beta");
-      expect(ranked[1]!.id).toBe("gamma");
-    });
-
-    test("quality mode amplifies priority", () => {
-      const ranked = rankProviderCandidates(makeRequest({ mode: "quality" }), [FREE_LOW, FREE_HIGH]);
-
-      expect(ranked[0]!.id).toBe("alpha");
-      expect(ranked[1]!.id).toBe("beta");
-    });
-
-    test("provider with tool support ranks higher when tools requested", () => {
-      const ranked = rankProviderCandidates(makeRequest({ tools: [{ type: "function" }] }), [NO_TOOLS, FREE_HIGH]);
-
-      expect(ranked[0]!.id).toBe("alpha");
+      expect(ranked[0]!.id).toBe("free");
     });
   });
 });
