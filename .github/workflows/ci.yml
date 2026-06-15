@@ -53,6 +53,7 @@ jobs:
           docker run -d \
             --name omnigate-test \
             -p 8787:8787 \
+            -e OMNIGATE_API_KEY=ci-omnigate-key \
             omnigate:ci
 
       - name: Smoke test — wait for health
@@ -78,7 +79,7 @@ jobs:
 
       - name: Smoke test — verify /v1/models
         run: |
-          body=$(curl -s http://localhost:8787/v1/models)
+          body=$(curl -s -H "Authorization: Bearer ci-omnigate-key" http://localhost:8787/v1/models)
           echo "$body" | grep -q 'omnigate/deepseek-v4-flash-auto' || { echo "Models endpoint missing aliases"; exit 1; }
 
       - name: Clean up container

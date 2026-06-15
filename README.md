@@ -31,6 +31,8 @@ Local development:
 git clone https://github.com/raindragon14/omnigate
 cd omnigate
 cp .env.example .env
+# Set OMNIGATE_API_KEY before starting. Provider keys are optional, but no
+# upstream provider will be selectable until OPENCODE_API_KEY or OPENROUTER_API_KEY is set.
 bun install
 bun run dev
 ```
@@ -123,7 +125,7 @@ Provider choice should optimize in this order:
 
 | Concern | Handling |
 | --- | --- |
-| OmniGate API key | Read from `OMNIGATE_API_KEY`; required for `/v1/*` after Sprint 4. |
+| OmniGate API key | Read from `OMNIGATE_API_KEY`; required at startup and for all `/v1/*` routes. |
 | Provider API keys | Read from provider-specific environment variables only. |
 | Prompt data | Kept in memory during request handling. Not persisted. |
 | Completion data | Returned to the client. Not persisted. |
@@ -143,18 +145,17 @@ Near-term routing memory:
 router core <-> SQLite provider_stats
 ```
 
-The ignored local docs contain the working product and design notes:
-
-- `docs/PRD.md`
-- `docs/SDS.md`
-- `docs/SPRINT_BREAKDOWN.md`
+Ignored local product/design notes may exist under `docs/`; when they conflict with executable config or source, trust the executable source.
 
 ## Scripts
 
 | Command | Purpose |
 | --- | --- |
+| `bun install` | Install dependencies |
 | `bun run dev` | Start with watch mode |
 | `bun test` | Run all tests |
+| `bun run test:feature` | Run `src/` unit and collocated integration tests |
+| `bun run test:integration` | Run cross-feature integration tests in `tests/` |
 | `bun run typecheck` | TypeScript check |
 
 ## License

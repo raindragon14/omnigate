@@ -7,7 +7,7 @@ services:
     env_file:
       - .env
     volumes:
-      - omnigate_data:/app/data
+      - omnigate_data:/app/.data
     restart: unless-stopped
     healthcheck:
       test:

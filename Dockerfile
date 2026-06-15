@@ -23,6 +23,7 @@ RUN bun install --frozen-lockfile --production
 COPY --from=build /app/src ./src
 COPY --from=build /app/tsconfig.json ./
 
+RUN mkdir -p /app/.data
 RUN chown -R appuser:appgroup /app
 
 USER appuser
