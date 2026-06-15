@@ -1,8 +1,8 @@
 # OmniGate
 
-Local free-model routing gateway for OpenCode.
+One local OpenAI-compatible endpoint for OpenCode users who want free-model fallback without manually switching providers.
 
-OmniGate pools a small set of reliable free providers behind one OpenAI-compatible base URL. The initial target is OpenCode Zen plus OpenRouter free models, with routing that favors speed, coding quality, quota availability, and fast first response.
+OmniGate pools OpenCode Zen and OpenRouter free models behind one base URL and one local API key. It keeps provider keys server-side, skips providers without configured keys, and routes each request toward the fastest useful free option based on speed, coding quality, quota pressure, reliability, and first-token behavior.
 
 ```bash
 curl http://localhost:8787/v1/chat/completions \
@@ -18,6 +18,8 @@ curl http://localhost:8787/v1/chat/completions \
 [![CI](https://img.shields.io/github/actions/workflow/status/raindragon14/omnigate/ci.yml?branch=master&style=flat-square&logo=github)](https://github.com/raindragon14/omnigate/actions)
 
 ## Quick Start
+
+Use Docker if you want OmniGate as a local gateway for OpenCode. Use local development if you are changing the router itself.
 
 Docker:
 
@@ -36,6 +38,15 @@ cp .env.example .env
 bun install
 bun run dev
 ```
+
+Required environment:
+
+| Variable | Purpose |
+| --- | --- |
+| `OMNIGATE_API_KEY` | Local bearer token required at startup and for `/v1/*` routes. |
+| `OPENCODE_API_KEY` | Enables OpenCode Zen providers. |
+| `OPENROUTER_API_KEY` | Enables OpenRouter free providers. |
+| `OMNIGATE_DB_PATH` | Optional SQLite stats path; defaults to `.data/omnigate.sqlite`. |
 
 OpenCode config:
 
@@ -56,7 +67,7 @@ OpenCode config:
 
 ## Product Focus
 
-OmniGate is not a general provider marketplace. It is a local free-provider pool for coding workflows.
+OmniGate is for a single developer or trusted local deployment that wants a stable OpenAI-compatible base URL for coding workflows. It is not a general provider marketplace or hosted multi-user gateway.
 
 In scope:
 
