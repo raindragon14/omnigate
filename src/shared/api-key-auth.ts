@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { timingSafeEqual } from "crypto";
 
 import { HTTP_STATUS_UNAUTHORIZED } from "./http-status";
 
@@ -24,8 +25,28 @@ export function registerApiKeyAuth(app: Hono, apiKey: string): void {
   });
 }
 
+/**
+ * Constant-time authorization check.
+ *
+ * Uses timingSafeEqual to prevent timing side-channel attacks where an
+ * attacker measures response-time differences to infer the API key
+ * character-by-character.  At the key lengths OmniGate uses (64 hex chars),
+ * the practical risk is negligible — this is defense-in-depth to ensure
+ * correctness regardless of key format or runtime behavior.
+ */
 function isAuthorized(rawAuthorization: string | undefined, apiKey: string): boolean {
-  return rawAuthorization === `Bearer ${apiKey}`;
+  if (rawAuthorization === undefined) {
+    return false;
+  }
+
+  const expected = Buffer.from(`Bearer ${apiKey}`);
+  const input = Buffer.from(rawAuthorization);
+
+  if (expected.length !== input.length) {
+    return false;
+  }
+
+  return timingSafeEqual(expected, input);
 }
 
 function sendUnauthorized(context: Context): Response {
