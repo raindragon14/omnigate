@@ -1,5 +1,5 @@
-import type { ChatCompletionRouteResult, OpenAIChatRequest, ProviderCandidate, ProviderCooldownStore, ProviderErrorCategory, ProviderStatsById, ProviderStatsRepository } from "../../shared/signatures";
-import { normalizeRequest } from "../../router/request-normalizer";
+import type { ChatCompletionRouteResult, OpenAIChatRequest, ProviderCandidate, ProviderCooldownStore, ProviderErrorCategory, ProviderStatsById, ProviderStatsRepository, RouterRequest } from "../../shared/signatures";
+import { normalizeRequest, UnsupportedMessageContentError } from "../../router/request-normalizer";
 import { selectProviderCandidates } from "../../router/provider-selector";
 import { rankProviderCandidates } from "../../router/provider-scorer";
 import { runProviderFallback, runProviderStreamFallback } from "../../router/fallback-runner";
@@ -11,6 +11,7 @@ import { createProviderStatsRepository, formatStatsDay } from "../../storage/pro
 import { createSqliteDatabase, migrateSqliteDatabase } from "../../storage/sqlite.database";
 
 const NO_PROVIDER_CODE: ProviderErrorCategory = "no_provider_available";
+const INVALID_REQUEST_CODE: ProviderErrorCategory = "invalid_request";
 const NO_PROVIDER_MESSAGE = "No available provider for this request";
 
 const cooldownStore = createProviderCooldownStore();
@@ -51,7 +52,7 @@ export class RoutingError extends Error {
  * @throws {RoutingError} When no provider is available or all providers fail.
  */
 export async function routeChatCompletion(chatRequest: OpenAIChatRequest): Promise<ChatCompletionRouteResult> {
-  const routerRequest = normalizeRequest(chatRequest);
+  const routerRequest = normalizeRouterRequest(chatRequest);
   const registry = loadProviderRegistry();
 
   const preliminaryCandidates = selectProviderCandidates({
@@ -111,6 +112,18 @@ export async function routeChatCompletion(chatRequest: OpenAIChatRequest): Promi
     const err = error as Error & { code?: ProviderErrorCategory };
 
     throw new RoutingError(err.code ?? NO_PROVIDER_CODE, err.message);
+  }
+}
+
+function normalizeRouterRequest(chatRequest: OpenAIChatRequest): RouterRequest {
+  try {
+    return normalizeRequest(chatRequest);
+  } catch (error) {
+    if (error instanceof UnsupportedMessageContentError) {
+      throw new RoutingError(INVALID_REQUEST_CODE, error.message);
+    }
+
+    throw error;
   }
 }
 

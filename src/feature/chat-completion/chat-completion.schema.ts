@@ -1,9 +1,27 @@
 import { z } from "zod";
 
+const textContentPartSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+}).passthrough();
+
+const nonTextContentPartSchema = z.object({
+  type: z.string().min(1),
+}).passthrough().refine((part) => part.type !== "text", {
+  message: "text content parts must include text",
+});
+
+const messageContentPartSchema = z.union([textContentPartSchema, nonTextContentPartSchema]);
+
+const messageContentSchema = z.union([
+  z.string(),
+  z.array(messageContentPartSchema).min(1),
+]).nullable();
+
 /** Zod schema for a single chat message, enforcing valid roles and content rules. */
 export const messageSchema = z.object({
   role: z.enum(["system", "user", "assistant", "tool"]),
-  content: z.string().nullable(),
+  content: messageContentSchema,
   name: z.string().optional(),
   tool_call_id: z.string().optional(),
   tool_calls: z.array(z.unknown()).optional(),

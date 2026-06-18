@@ -89,6 +89,44 @@ describe("chat completion integration", () => {
     expect(body.error).toBeDefined();
   });
 
+  /** Should accept text-only OpenAI content-part arrays and route them as text. */
+  test("accepts text-only content-part arrays", async () => {
+    const response = await withClearedProviderApiKeys(async () => {
+      return app.request(CHAT_COMPLETION_PATH, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: JSON.stringify({
+          model: "omnigate/deepseek-v4-flash-auto",
+          messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_BAD_REQUEST);
+
+    const body = await response.json();
+
+    expect(body.error.message).toContain("No available provider");
+  });
+
+  /** Should reject real multimodal content with a clear client error. */
+  test("rejects multimodal content-part arrays", async () => {
+    const response = await app.request(CHAT_COMPLETION_PATH, {
+      method: "POST",
+      headers: AUTH_HEADERS,
+      body: JSON.stringify({
+        model: "omnigate/deepseek-v4-flash-auto",
+        messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/image.png" } }] }],
+      }),
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_BAD_REQUEST);
+
+    const body = await response.json();
+
+    expect(body.error.message).toContain("Only text message content parts are supported");
+  });
+
   /** Should require OmniGate API key auth before request validation. */
   test("returns 401 for missing auth", async () => {
     const response = await app.request(CHAT_COMPLETION_PATH, {

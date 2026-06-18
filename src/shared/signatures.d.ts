@@ -162,13 +162,28 @@ export declare function createAppError(code: string, message: string, statusCode
 /** Routing mode that influences provider scoring. */
 export type RoutingMode = "balanced" | "quality" | "speed" | "survival";
 
+export type ChatMessageTextContentPart = {
+  type: "text";
+  text: string;
+  [key: string]: unknown;
+};
+
+export type ChatMessageContentPart = ChatMessageTextContentPart | {
+  type: string;
+  [key: string]: unknown;
+};
+
 /** A single message in an OpenAI-compatible chat conversation. */
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
+  content: string | null | ChatMessageContentPart[];
   name?: string | undefined;
   tool_call_id?: string | undefined;
   tool_calls?: unknown[] | undefined;
+};
+
+export type RouterChatMessage = Omit<ChatMessage, "content"> & {
+  content: string | null;
 };
 
 /** Incoming request body for POST /v1/chat/completions (OpenAI-compatible shape). */
@@ -186,7 +201,7 @@ export type OpenAIChatRequest = {
 
 /** Normalised internal representation of a chat completion request. */
 export type RouterRequest = {
-  messages: ChatMessage[];
+  messages: RouterChatMessage[];
   model: string;
   maxTokens?: number | undefined;
   temperature?: number | undefined;
@@ -383,6 +398,10 @@ export declare function resetProviderRegistry(): void;
  * @param request  The raw incoming request body.
  * @returns A normalised RouterRequest with snake_case converted to camelCase.
  */
+export declare class UnsupportedMessageContentError extends Error {
+  constructor(message: string);
+}
+
 export declare function normalizeRequest(request: OpenAIChatRequest): RouterRequest;
 
 /**

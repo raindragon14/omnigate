@@ -25,6 +25,16 @@ describe("chat completion feature", () => {
     expect(routerRequest.mode).toBe("balanced");
   });
 
+  /** Should normalize OpenAI text content-part arrays to plain provider text. */
+  test("normalizes text-only content parts to string content", () => {
+    const routerRequest = normalizeRequest({
+      model: "test-model",
+      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }, { type: "text", text: " world" }] }],
+    });
+
+    expect(routerRequest.messages).toEqual([{ role: "user", content: "Hello world" }]);
+  });
+
   /** Should default stream to false when the incoming request omits it. */
   test("defaults stream to false when missing", () => {
     const { stream } = normalizeRequest({ model: "test", messages: [{ role: "user", content: "hi" }] });
@@ -57,6 +67,22 @@ describe("chat completion feature", () => {
     expect(routerRequest.tools).toEqual([{ type: "function" }]);
     expect(routerRequest.toolChoice).toBe("auto");
     expect(routerRequest.responseFormat).toEqual({ type: "json_object" });
+  });
+
+  /** Should throw a client RoutingError for unsupported non-text content parts. */
+  test("throws invalid request for multimodal content parts", async () => {
+    try {
+      await routeChatCompletion({
+        model: "omnigate/deepseek-v4-flash-auto",
+        messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/image.png" } }] }],
+      });
+
+      expect.unreachable("should have thrown");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RoutingError);
+      expect((error as RoutingError).code).toBe("invalid_request");
+      expect((error as RoutingError).message).toContain("Only text message content parts are supported");
+    }
   });
 
   /** Should throw RoutingError when no provider is available for unknown model. */

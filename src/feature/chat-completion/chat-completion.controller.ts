@@ -16,7 +16,7 @@ const STREAM_RESPONSE_HEADERS = {
   Connection: "keep-alive",
 };
 
-const CLIENT_ERROR_CODES = new Set(["no_provider_available", "no_api_key"]);
+const CLIENT_ERROR_CODES = new Set<string>(["no_provider_available", "no_api_key", "invalid_request"]);
 
 /**
  * Handles POST /v1/chat/completions requests.  Validates the body with Zod,
