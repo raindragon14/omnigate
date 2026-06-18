@@ -28,7 +28,6 @@ providers:
     supports_tools: true
     supports_json: true
     supports_streaming: true
-    supports_multimodal: false
     rate_limit:
       rpm: 10
 
@@ -45,7 +44,6 @@ providers:
     supports_tools: true
     supports_json: true
     supports_streaming: true
-    supports_multimodal: false
     rate_limit:
       rpm: 20
       rpd: 50

@@ -59,29 +59,6 @@ describe("chat completion feature", () => {
     expect(routerRequest.responseFormat).toEqual({ type: "json_object" });
   });
 
-  /** Should flag requiresMultimodal when any message uses array content. */
-  test("flags requiresMultimodal for array content", () => {
-    const routerRequest = normalizeRequest({
-      model: "test",
-      messages: [
-        { role: "system", content: "you are helpful" },
-        { role: "user", content: [{ type: "text", text: "describe" }, { type: "image_url", image_url: { url: "https://x" } }] },
-      ],
-    });
-
-    expect(routerRequest.requiresMultimodal).toBe(true);
-  });
-
-  /** Should leave requiresMultimodal undefined when all content is string or null. */
-  test("does not flag requiresMultimodal for string content", () => {
-    const routerRequest = normalizeRequest({
-      model: "test",
-      messages: [{ role: "user", content: "hi" }],
-    });
-
-    expect(routerRequest.requiresMultimodal).toBe(false);
-  });
-
   /** Should throw RoutingError when no provider is available for unknown model. */
   test("throws routing error for unknown model", async () => {
     try {

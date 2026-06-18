@@ -5,15 +5,15 @@ import { createProviderCooldownStore } from "./provider-cooldown";
 import { selectProviderCandidates } from "./provider-selector";
 
 const ALL_PROVIDERS: ProviderCandidate[] = [
-  { id: "alpha", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 80, qualityScore: 80, enabled: true, paidFallback: false, apiKeyEnv: "KEY_A", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsMultimodal: false, rateLimit: {} },
-  { id: "beta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 90, qualityScore: 90, enabled: true, paidFallback: false, apiKeyEnv: "KEY_B", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsMultimodal: false, rateLimit: {} },
-  { id: "gamma", baseUrl: "", model: "", family: "mimo-v2.5", priority: 100, qualityScore: 85, enabled: true, paidFallback: false, apiKeyEnv: "KEY_C", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsMultimodal: false, rateLimit: {} },
-  { id: "delta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 70, qualityScore: 70, enabled: false, paidFallback: false, apiKeyEnv: "KEY_D", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsMultimodal: false, rateLimit: {} },
-  { id: "epsilon", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 50, qualityScore: 50, enabled: true, paidFallback: true, apiKeyEnv: "KEY_E", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsMultimodal: false, rateLimit: {} },
-  { id: "zeta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 60, qualityScore: 60, enabled: true, paidFallback: false, apiKeyEnv: "KEY_F", context: 100000, supportsTools: false, supportsJson: true, supportsStreaming: true, supportsMultimodal: false, rateLimit: {} },
-  { id: "eta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 55, qualityScore: 55, enabled: true, paidFallback: false, apiKeyEnv: "KEY_G", context: 100000, supportsTools: true, supportsJson: false, supportsStreaming: true, supportsMultimodal: false, rateLimit: {} },
-  { id: "theta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 45, qualityScore: 45, enabled: true, paidFallback: false, apiKeyEnv: "KEY_H", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: false, supportsMultimodal: false, rateLimit: {} },
-  { id: "iota", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 35, qualityScore: 35, enabled: true, paidFallback: false, apiKeyEnv: "KEY_I", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsMultimodal: true, rateLimit: {} },
+  { id: "alpha", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 80, qualityScore: 80, enabled: true, paidFallback: false, apiKeyEnv: "KEY_A", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "beta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 90, qualityScore: 90, enabled: true, paidFallback: false, apiKeyEnv: "KEY_B", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "gamma", baseUrl: "", model: "", family: "mimo-v2.5", priority: 100, qualityScore: 85, enabled: true, paidFallback: false, apiKeyEnv: "KEY_C", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "delta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 70, qualityScore: 70, enabled: false, paidFallback: false, apiKeyEnv: "KEY_D", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "epsilon", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 50, qualityScore: 50, enabled: true, paidFallback: true, apiKeyEnv: "KEY_E", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "zeta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 60, qualityScore: 60, enabled: true, paidFallback: false, apiKeyEnv: "KEY_F", context: 100000, supportsTools: false, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "eta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 55, qualityScore: 55, enabled: true, paidFallback: false, apiKeyEnv: "KEY_G", context: 100000, supportsTools: true, supportsJson: false, supportsStreaming: true, rateLimit: {} },
+  { id: "theta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 45, qualityScore: 45, enabled: true, paidFallback: false, apiKeyEnv: "KEY_H", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: false, rateLimit: {} },
+  { id: "iota", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 35, qualityScore: 35, enabled: true, paidFallback: false, apiKeyEnv: "KEY_I", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
 ];
 
 const MOCK_ALIASES = {
@@ -127,22 +127,6 @@ describe("selectProviderCandidates", () => {
 
     expect(result.some((provider) => provider.id === "theta")).toBe(false);
     expect(result.some((provider) => provider.id === "alpha")).toBe(true);
-  });
-
-  test("excludes providers without multimodal support when request has array content", () => {
-    const result = selectProviderCandidates(makeInput({
-      request: { model: "omnigate/deepseek-v4-flash-auto", messages: [{ role: "user", content: [{ type: "text", text: "x" }] }], stream: false, mode: "balanced", requiresMultimodal: true },
-    }));
-
-    expect(result.some((provider) => provider.id === "alpha")).toBe(false);
-    expect(result.some((provider) => provider.id === "iota")).toBe(true);
-  });
-
-  test("includes all providers when request does not require multimodal", () => {
-    const result = selectProviderCandidates(makeInput());
-
-    expect(result.some((provider) => provider.id === "alpha")).toBe(true);
-    expect(result.some((provider) => provider.id === "iota")).toBe(true);
   });
 
   test("matches correct family", () => {

@@ -165,7 +165,7 @@ export type RoutingMode = "balanced" | "quality" | "speed" | "survival";
 /** A single message in an OpenAI-compatible chat conversation. */
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | null | unknown[];
+  content: string | null;
   name?: string | undefined;
   tool_call_id?: string | undefined;
   tool_calls?: unknown[] | undefined;
@@ -195,8 +195,6 @@ export type RouterRequest = {
   tools?: unknown[] | undefined;
   toolChoice?: unknown | undefined;
   responseFormat?: unknown | undefined;
-  /** True when any message uses array (multi-modal) content. */
-  requiresMultimodal?: boolean | undefined;
   mode: RoutingMode;
 };
 
@@ -223,7 +221,6 @@ export type ProviderCandidate = {
   supportsTools: boolean;
   supportsJson: boolean;
   supportsStreaming: boolean;
-  supportsMultimodal: boolean;
   rateLimit: ProviderRateLimit;
 };
 

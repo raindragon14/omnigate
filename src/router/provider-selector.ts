@@ -19,14 +19,12 @@ export function selectProviderCandidates(input: ProviderSelectionInput): Provide
   const shouldAllowPaid = aliasConfig.allow_paid === true;
   const shouldRequireTools = request.tools !== undefined && request.tools.length > 0;
   const shouldRequireJson = request.responseFormat !== undefined;
-  const shouldRequireMultimodal = request.requiresMultimodal === true;
 
   return providers.filter((provider) => isProviderEligible(provider, {
     input,
     shouldAllowPaid,
     shouldRequireTools,
     shouldRequireJson,
-    shouldRequireMultimodal,
   }));
 }
 
@@ -35,11 +33,10 @@ type ProviderEligibilityOptions = {
   shouldAllowPaid: boolean;
   shouldRequireTools: boolean;
   shouldRequireJson: boolean;
-  shouldRequireMultimodal: boolean;
 };
 
 function isProviderEligible(provider: ProviderCandidate, options: ProviderEligibilityOptions): boolean {
-  const { input, shouldAllowPaid, shouldRequireTools, shouldRequireJson, shouldRequireMultimodal } = options;
+  const { input, shouldAllowPaid, shouldRequireTools, shouldRequireJson } = options;
   const { request, aliases, cooldownStore, resolveApiKey, nowMs } = input;
   const aliasConfig = aliases[request.model];
 
@@ -59,7 +56,7 @@ function isProviderEligible(provider: ProviderCandidate, options: ProviderEligib
     return false;
   }
 
-  return canProviderServeFeatures(provider, request, shouldRequireTools, shouldRequireJson, shouldRequireMultimodal);
+  return canProviderServeFeatures(provider, request, shouldRequireTools, shouldRequireJson);
 }
 
 function hasProviderApiKey(
@@ -76,17 +73,12 @@ function canProviderServeFeatures(
   request: ProviderSelectionInput["request"],
   shouldRequireTools: boolean,
   shouldRequireJson: boolean,
-  shouldRequireMultimodal: boolean,
 ): boolean {
   if (shouldRequireTools && !provider.supportsTools) {
     return false;
   }
 
   if (shouldRequireJson && !provider.supportsJson) {
-    return false;
-  }
-
-  if (shouldRequireMultimodal && !provider.supportsMultimodal) {
     return false;
   }
 

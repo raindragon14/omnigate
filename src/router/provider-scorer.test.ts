@@ -22,7 +22,6 @@ function makeProvider(overrides: Partial<ProviderCandidate> = {}): ProviderCandi
     supportsTools: true,
     supportsJson: true,
     supportsStreaming: true,
-    supportsMultimodal: false,
     rateLimit: {},
     ...overrides,
   };
