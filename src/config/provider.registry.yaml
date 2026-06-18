@@ -31,18 +31,35 @@ providers:
     rate_limit:
       rpm: 10
 
-  - id: openrouter_deepseek_free
+  - id: openrouter_nemotron_3_nano_omni_free
     base_url: "https://openrouter.ai/api/v1"
-    model: "deepseek/deepseek-v4-flash:free"
+    model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
     api_key_env: "OPENROUTER_API_KEY"
-    family: "deepseek-v4-flash"
-    priority: 90
-    quality_score: 86
-    speed_score: 80
+    family: "nemotron-3-nano-omni"
+    priority: 88
+    quality_score: 80
+    speed_score: 82
     enabled: true
-    context: 1000000
+    context: 256000
     supports_tools: true
-    supports_json: true
+    supports_json: false
+    supports_streaming: true
+    rate_limit:
+      rpm: 20
+      rpd: 50
+
+  - id: openrouter_poolside_laguna_xs2_free
+    base_url: "https://openrouter.ai/api/v1"
+    model: "poolside/laguna-xs.2:free"
+    api_key_env: "OPENROUTER_API_KEY"
+    family: "laguna-xs.2"
+    priority: 86
+    quality_score: 76
+    speed_score: 92
+    enabled: true
+    context: 262144
+    supports_tools: true
+    supports_json: false
     supports_streaming: true
     rate_limit:
       rpm: 20
@@ -54,6 +71,6 @@ aliases:
   omnigate/mimo-v2.5-auto:
     families: ["mimo-v2.5"]
   omnigate/coding-balanced:
-    families: ["deepseek-v4-flash", "mimo-v2.5"]
+    families: ["deepseek-v4-flash", "mimo-v2.5", "nemotron-3-nano-omni"]
   omnigate/coding-fast:
-    families: ["mimo-v2.5", "deepseek-v4-flash"]
+    families: ["mimo-v2.5", "deepseek-v4-flash", "laguna-xs.2"]
