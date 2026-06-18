@@ -20,6 +20,7 @@ export function normalizeRequest(request: OpenAIChatRequest): RouterRequest {
     tools: request.tools,
     toolChoice: request.tool_choice,
     responseFormat: request.response_format,
+    requiresMultimodal: request.messages.some((message) => Array.isArray(message.content)),
     mode: DEFAULT_RESPONSE_MODE,
   };
 }

@@ -18,6 +18,7 @@ const PROVIDER: ProviderCandidate = {
   supportsTools: true,
   supportsJson: true,
   supportsStreaming: true,
+  supportsMultimodal: false,
   rateLimit: {},
 };
 

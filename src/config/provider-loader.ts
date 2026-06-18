@@ -36,6 +36,7 @@ const providerSchema = z.object({
   supports_tools: z.boolean().optional(),
   supports_json: z.boolean().optional(),
   supports_streaming: z.boolean().optional(),
+  supports_multimodal: z.boolean().optional(),
   rate_limit: rateLimitSchema.optional(),
 });
 
@@ -132,6 +133,7 @@ function toProviderCandidate(raw: RawProvider): ProviderCandidate {
     supportsTools: raw.supports_tools ?? false,
     supportsJson: raw.supports_json ?? false,
     supportsStreaming: raw.supports_streaming ?? true,
+    supportsMultimodal: raw.supports_multimodal ?? false,
     rateLimit: toRateLimit(raw.rate_limit),
   };
 }

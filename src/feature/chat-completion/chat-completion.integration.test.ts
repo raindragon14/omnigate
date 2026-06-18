@@ -110,6 +110,26 @@ describe("chat completion integration", () => {
 
     expect(response.status).toBe(HTTP_STATUS_UNAUTHORIZED);
   });
+
+  /** Should accept array (multi-modal) content and not 400 at the schema layer. */
+  test("accepts array content in messages", async () => {
+    const response = await withClearedProviderApiKeys(async () => {
+      return app.request(CHAT_COMPLETION_PATH, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: JSON.stringify({
+          model: "omnigate/deepseek-v4-flash-auto",
+          messages: [
+            { role: "user", content: [{ type: "text", text: "hi" }, { type: "image_url", image_url: { url: "https://x" } }] },
+          ],
+        }),
+      });
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_BAD_REQUEST);
+    const body = await response.json();
+    expect(body.error.message).toContain("No available provider");
+  });
 });
 
 async function withClearedProviderApiKeys<TValue>(callback: () => Promise<TValue>): Promise<TValue> {
