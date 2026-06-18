@@ -16,9 +16,16 @@ const rateLimitSchema = z.object({
   rpd: z.number().int().positive().optional(),
 });
 
+const aliasWeightsSchema = z.object({
+  speed: z.number().min(0).max(10).optional(),
+  quality: z.number().min(0).max(10).optional(),
+});
+
 const aliasSchema = z.object({
   families: z.array(z.string().min(1)).min(1),
   allow_paid: z.boolean().optional(),
+  weights: aliasWeightsSchema.optional(),
+  tiebreak: z.enum(["priority", "speed", "quality"]).optional(),
 });
 
 const providerSchema = z.object({

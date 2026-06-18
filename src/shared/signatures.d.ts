@@ -242,9 +242,21 @@ export type ProviderCandidate = {
 };
 
 /** Configuration for a single model alias in the provider registry. */
+export type AliasWeights = {
+  speed?: number | undefined;
+  quality?: number | undefined;
+};
+
+/** How to break ties when scores are equal. */
+export type TiebreakMode = "priority" | "speed" | "quality";
+
 export type AliasConfig = {
   families: string[];
   allow_paid?: boolean | undefined;
+  /** Override scoring weights for this alias. When set, overrides mode-based weights. */
+  weights?: AliasWeights | undefined;
+  /** How to break ties between providers with equal scores. Defaults to "priority". */
+  tiebreak?: TiebreakMode | undefined;
 };
 
 /** The complete provider registry loaded from provider.registry.yaml. */
@@ -529,6 +541,7 @@ export type ProviderScoringInput = {
   request: RouterRequest;
   provider: ProviderCandidate;
   stats?: ProviderStatsRecord | undefined;
+  aliasConfig?: AliasConfig | undefined;
 };
 
 /** Input for ranking provider candidates. */
@@ -536,6 +549,7 @@ export type ProviderRankingInput = {
   request: RouterRequest;
   providers: ProviderCandidate[];
   statsByProviderId?: ProviderStatsById | undefined;
+  aliasConfig?: AliasConfig | undefined;
 };
 
 /**

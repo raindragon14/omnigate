@@ -86,10 +86,12 @@ export async function routeChatCompletion(chatRequest: OpenAIChatRequest): Promi
   }
 
   const statsByProviderId = loadProviderStatsById(candidates, providerStatsRepository, Date.now());
+  const aliasConfig = registry.aliases[routerRequest.model];
   const rankedCandidates = rankProviderCandidates({
     request: routerRequest,
     providers: candidates,
     statsByProviderId,
+    aliasConfig,
   });
 
   try {

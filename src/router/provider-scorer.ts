@@ -1,4 +1,5 @@
 import type {
+  AliasConfig,
   ProviderCandidate,
   ProviderRankingInput,
   ProviderScore,
@@ -6,6 +7,7 @@ import type {
   ProviderStatsRecord,
   RouterRequest,
   RoutingMode,
+  TiebreakMode,
 } from "../shared/signatures";
 
 const MIN_SCORE = 0;
@@ -42,11 +44,12 @@ type ScoringWeights = {
  * @returns A ProviderScore with providerId and score.
  */
 export function scoreProvider(input: ProviderScoringInput): ProviderScore {
-  const { request, provider, stats } = input;
-  const weights = getScoringWeights(request.mode);
+  const { request, provider, stats, aliasConfig } = input;
+  const weights = getScoringWeights(request.mode, aliasConfig);
   const score = calculateWeightedScore(request, provider, stats, weights);
+  const tiebreakMode = aliasConfig?.tiebreak ?? "priority";
 
-  return { providerId: provider.id, score: applyTiebreaker(score, provider) };
+  return { providerId: provider.id, score: applyTiebreaker(score, provider, tiebreakMode, stats) };
 }
 
 /**
@@ -61,6 +64,7 @@ export function rankProviderCandidates(input: ProviderRankingInput): ProviderCan
       request: input.request,
       provider,
       stats: input.statsByProviderId?.[provider.id],
+      aliasConfig: input.aliasConfig,
     }).score,
   }));
 
@@ -88,7 +92,19 @@ function calculateWeightedScore(
   );
 }
 
-function getScoringWeights(mode: RoutingMode): ScoringWeights {
+/**
+ * Returns scoring weights, preferring alias-specific weights over mode-based defaults.
+ */
+function getScoringWeights(mode: RoutingMode, aliasConfig?: AliasConfig): ScoringWeights {
+  // Use alias-specific weights if provided
+  if (aliasConfig?.weights !== undefined) {
+    const speedWeight = aliasConfig.weights.speed ?? 2;
+    const qualityWeight = aliasConfig.weights.quality ?? 1.5;
+
+    return createWeights(speedWeight, qualityWeight, 2, 1, 1, 1, 1);
+  }
+
+  // Fall back to mode-based weights
   if (mode === "speed") {
     return createWeights(3, 1, 3, 1.5, 1, 1, 1);
   }
@@ -178,7 +194,27 @@ function calculatePaidFallbackPenalty(mode: RoutingMode, provider: ProviderCandi
   return mode === "survival" && provider.paidFallback ? MODE_SURVIVAL_PAID_PENALTY : 0;
 }
 
-function applyTiebreaker(score: number, provider: ProviderCandidate): number {
+/**
+ * Applies tiebreaker to break equal scores. Uses the alias-configured tiebreak mode
+ * or falls back to priority-based tiebreaking.
+ */
+function applyTiebreaker(
+  score: number,
+  provider: ProviderCandidate,
+  tiebreakMode: TiebreakMode,
+  stats?: ProviderStatsRecord,
+): number {
+  if (tiebreakMode === "speed") {
+    // Use configured speed score as tiebreaker (higher is better)
+    return score + (provider.speedScore ?? DEFAULT_SPEED_SCORE) / TIEBREAKER_DIVISOR;
+  }
+
+  if (tiebreakMode === "quality") {
+    // Use quality score as tiebreaker (higher is better)
+    return score + provider.qualityScore / TIEBREAKER_DIVISOR;
+  }
+
+  // Default: priority-based tiebreaker (higher priority wins)
   return score + provider.priority / TIEBREAKER_DIVISOR;
 }
 

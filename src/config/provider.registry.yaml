@@ -74,3 +74,7 @@ aliases:
     families: ["deepseek-v4-flash", "mimo-v2.5", "nemotron-3-nano-omni"]
   omnigate/coding-fast:
     families: ["mimo-v2.5", "deepseek-v4-flash", "laguna-xs.2"]
+    weights:
+      speed: 5
+      quality: 0.5
+    tiebreak: speed
