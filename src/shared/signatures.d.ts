@@ -197,6 +197,8 @@ export type OpenAIChatRequest = {
   tools?: unknown[] | undefined;
   tool_choice?: unknown | undefined;
   response_format?: unknown | undefined;
+  /** Routing mode override. When omitted, defaults to "balanced". */
+  mode?: RoutingMode | undefined;
 };
 
 /** Normalised internal representation of a chat completion request. */

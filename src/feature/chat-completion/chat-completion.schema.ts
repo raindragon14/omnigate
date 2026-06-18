@@ -47,4 +47,5 @@ export const chatCompletionRequestSchema = z.object({
   tools: z.array(z.unknown()).optional(),
   tool_choice: z.unknown().optional(),
   response_format: z.unknown().optional(),
+  mode: z.enum(["balanced", "quality", "speed", "survival"]).optional(),
 });

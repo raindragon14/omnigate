@@ -29,7 +29,7 @@ export function normalizeRequest(request: OpenAIChatRequest): RouterRequest {
     tools: request.tools,
     toolChoice: request.tool_choice,
     responseFormat: request.response_format,
-    mode: DEFAULT_RESPONSE_MODE,
+    mode: request.mode ?? DEFAULT_RESPONSE_MODE,
   };
 }
 
