@@ -5,6 +5,7 @@ import { Database } from "bun:sqlite";
 const MEMORY_DATABASE_PATH = ":memory:";
 const PROVIDER_STATS_TABLE = "provider_stats";
 const TTFT_COLUMN = "avg_time_to_first_token_ms";
+const BUSY_TIMEOUT_MS = 5_000;
 
 type TableColumnRow = {
   name: string;
@@ -18,7 +19,21 @@ type TableColumnRow = {
 export function createSqliteDatabase(databasePath: string): Database {
   ensureDatabaseDirectory(databasePath);
 
-  return new Database(databasePath);
+  const database = new Database(databasePath);
+
+  configureSqlite(database);
+
+  return database;
+}
+
+function configureSqlite(database: Database): void {
+  database.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
+
+  if (database.filename === MEMORY_DATABASE_PATH) {
+    return;
+  }
+
+  database.exec("PRAGMA journal_mode = WAL");
 }
 
 /**

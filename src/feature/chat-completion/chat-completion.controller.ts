@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
+import type { ProviderAdapter } from "../../provider/provider-adapter";
 import { chatCompletionRequestSchema } from "./chat-completion.schema";
 import { routeChatCompletion, RoutingError } from "./chat-completion.service";
 import { HTTP_STATUS_BAD_REQUEST, HTTP_STATUS_INTERNAL_SERVER_ERROR } from "../../shared/http-status";
@@ -25,7 +26,10 @@ const CLIENT_ERROR_CODES = new Set<string>(["no_provider_available", "no_api_key
  * @param context  Hono request context.
  * @returns A JSON Response containing either the completion or an error shape.
  */
-export async function handleChatCompletion(context: Context): Promise<Response> {
+export async function handleChatCompletion(
+  context: Context,
+  adapter?: ProviderAdapter,
+): Promise<Response> {
   let body: unknown;
 
   try {
@@ -41,7 +45,7 @@ export async function handleChatCompletion(context: Context): Promise<Response> 
   }
 
   try {
-    const result = await routeChatCompletion(parseResult.data);
+    const result = await routeChatCompletion(parseResult.data, adapter);
 
     if (result.type === "stream") {
       return sendStreamResponse(result.response);
@@ -53,14 +57,18 @@ export async function handleChatCompletion(context: Context): Promise<Response> 
       return sendBadRequestError(context, error.message);
     }
 
-    const message = error instanceof Error ? error.message : INTERNAL_ERROR_MESSAGE;
-
-    return sendInternalError(context, message);
+    return sendInternalError(context);
   }
 }
 
 function sendStreamResponse(response: OpenAIChatStreamResponse): Response {
-  return new Response(response.stream, { headers: STREAM_RESPONSE_HEADERS });
+  const headers = new Headers(response.headers);
+
+  for (const [key, value] of Object.entries(STREAM_RESPONSE_HEADERS)) {
+    headers.set(key, value);
+  }
+
+  return new Response(response.stream, { headers });
 }
 
 function sendBadRequestError(context: Context, message: string): Response {
@@ -76,11 +84,11 @@ function sendBadRequestError(context: Context, message: string): Response {
   );
 }
 
-function sendInternalError(context: Context, message: string): Response {
+function sendInternalError(context: Context): Response {
   return context.json(
     {
       error: {
-        message,
+        message: INTERNAL_ERROR_MESSAGE,
         type: INTERNAL_ERROR_CODE,
         code: INTERNAL_ERROR_CODE,
       },

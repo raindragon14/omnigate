@@ -78,6 +78,13 @@ describe("provider scoring", () => {
       expect(quick.score).toBeGreaterThan(delayed.score);
     });
 
+    test("uses time-to-first-token for streaming latency", () => {
+      const quick = scoreProvider({ request: makeRequest({ stream: true }), provider: makeProvider(), stats: makeStats({ avgTimeToFirstTokenMs: 200 }) });
+      const delayed = scoreProvider({ request: makeRequest({ stream: true }), provider: makeProvider(), stats: makeStats({ avgTimeToFirstTokenMs: 2000 }) });
+
+      expect(quick.score).toBeGreaterThan(delayed.score);
+    });
+
     test("penalizes high failure ratio", () => {
       const reliable = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ failureCount: 0 }) });
       const failing = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ failureCount: 8 }) });
@@ -139,18 +146,18 @@ describe("provider scoring", () => {
     });
 
     test("balanced mode can promote provider with better measured speed", () => {
-      const opencode = makeProvider({ id: "opencode", speedScore: 85, qualityScore: 90 });
-      const openrouter = makeProvider({ id: "openrouter", speedScore: 80, qualityScore: 86 });
+      const providerA = makeProvider({ id: "provider_a", speedScore: 85, qualityScore: 90 });
+      const providerB = makeProvider({ id: "provider_b", speedScore: 80, qualityScore: 86 });
       const ranked = rankProviderCandidates({
         request: makeRequest(),
-        providers: [opencode, openrouter],
+        providers: [providerA, providerB],
         statsByProviderId: {
-          opencode: makeStats({ providerId: "opencode", avgTokensPerSecond: 20 }),
-          openrouter: makeStats({ providerId: "openrouter", avgTokensPerSecond: 90 }),
+          provider_a: makeStats({ providerId: "provider_a", avgTokensPerSecond: 20 }),
+          provider_b: makeStats({ providerId: "provider_b", avgTokensPerSecond: 90 }),
         },
       });
 
-      expect(ranked[0]!.id).toBe("openrouter");
+      expect(ranked[0]!.id).toBe("provider_b");
     });
 
     test("survival mode prefers reliable provider", () => {

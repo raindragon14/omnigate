@@ -1,23 +1,37 @@
-import type { ProviderCandidate, ProviderRequest, ProviderResponse, ProviderStreamResponse, RouterRequest } from "../shared/signatures";
+import type {
+  ProviderCandidate,
+  ProviderRequest,
+  ProviderResponse,
+  ProviderStreamResponse,
+  RouterRequest,
+} from "../shared/signatures";
 import type { ProviderAdapter } from "./provider-adapter";
 
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
 const CONTENT_TYPE_JSON = "application/json";
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+export type OpenAiCompatibleAdapterOptions = {
+  /** Optional fetch implementation; defaults to global `fetch`. */
+  fetch?: typeof fetch;
+};
+
 /**
  * Creates an adapter that works with any OpenAI-compatible chat API.
  * The adapter builds requests at `{baseUrl}/chat/completions` with a Bearer
  * token Authorization header and a 30-second timeout via AbortController.
+ * @param options  Optional adapter configuration.
  * @returns A configured ProviderAdapter instance.
  */
-export function createOpenAiCompatibleAdapter(): ProviderAdapter {
+export function createOpenAiCompatibleAdapter(options: OpenAiCompatibleAdapterOptions = {}): ProviderAdapter {
+  const fetchImpl = options.fetch ?? fetch;
+
   return {
     id: "openai-compatible",
     supports: isSupported,
     transformRequest: buildProviderRequest,
-    send: sendProviderRequest,
-    sendStream: sendProviderStreamRequest,
+    send: (request) => sendProviderRequest(request, fetchImpl),
+    sendStream: (request) => sendProviderStreamRequest(request, fetchImpl),
   };
 }
 
@@ -57,12 +71,15 @@ function buildProviderRequest(request: RouterRequest, provider: ProviderCandidat
   };
 }
 
-async function sendProviderRequest(providerRequest: ProviderRequest): Promise<ProviderResponse> {
+async function sendProviderRequest(
+  providerRequest: ProviderRequest,
+  fetchImpl: typeof fetch,
+): Promise<ProviderResponse> {
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), DEFAULT_TIMEOUT_MS);
 
   try {
-    const response = await fetchProviderResponse(providerRequest, abortController);
+    const response = await fetchProviderResponse(providerRequest, fetchImpl, abortController);
 
     return await toProviderResponse(response);
   } finally {
@@ -70,12 +87,15 @@ async function sendProviderRequest(providerRequest: ProviderRequest): Promise<Pr
   }
 }
 
-async function sendProviderStreamRequest(providerRequest: ProviderRequest): Promise<ProviderStreamResponse> {
+async function sendProviderStreamRequest(
+  providerRequest: ProviderRequest,
+  fetchImpl: typeof fetch,
+): Promise<ProviderStreamResponse> {
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), DEFAULT_TIMEOUT_MS);
 
   try {
-    const response = await fetchProviderResponse(providerRequest, abortController);
+    const response = await fetchProviderResponse(providerRequest, fetchImpl, abortController);
 
     return toProviderStreamResponse(response);
   } finally {
@@ -83,8 +103,12 @@ async function sendProviderStreamRequest(providerRequest: ProviderRequest): Prom
   }
 }
 
-function fetchProviderResponse(providerRequest: ProviderRequest, abortController: AbortController): Promise<Response> {
-  return fetch(providerRequest.url, {
+function fetchProviderResponse(
+  providerRequest: ProviderRequest,
+  fetchImpl: typeof fetch,
+  abortController: AbortController,
+): Promise<Response> {
+  return fetchImpl(providerRequest.url, {
     method: "POST",
     headers: providerRequest.headers,
     body: JSON.stringify(providerRequest.body),

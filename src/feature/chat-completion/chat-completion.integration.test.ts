@@ -3,6 +3,7 @@ import type { Hono } from "hono";
 
 import { createApp } from "../../app";
 import { DEFAULT_PORT } from "../../config/config-loader";
+import { loadProviderRegistry } from "../../config/provider-loader";
 import { HTTP_STATUS_BAD_REQUEST, HTTP_STATUS_UNAUTHORIZED } from "../../shared/http-status";
 
 const CHAT_COMPLETION_PATH = "/v1/chat/completions";
@@ -12,10 +13,7 @@ const AUTH_HEADERS = {
   "Content-Type": "application/json",
 };
 const TEST_APP_CONFIG = { port: DEFAULT_PORT, omnigateApiKey: TEST_OMNIGATE_API_KEY, databasePath: ":memory:" };
-const PROVIDER_API_KEY_ENV_NAMES = [
-  "OPENCODE_API_KEY",
-  "OPENROUTER_API_KEY",
-];
+const PROVIDER_API_KEY_ENV_NAMES = [...new Set(loadProviderRegistry().providers.map((p) => p.apiKeyEnv))];
 
 let app: Hono;
 

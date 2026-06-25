@@ -1,29 +1,67 @@
-import type { ChatCompletionRouteResult, OpenAIChatRequest, ProviderCandidate, ProviderCooldownStore, ProviderErrorCategory, ProviderStatsById, ProviderStatsRepository, RouterRequest } from "../../shared/signatures";
+import type {
+  ChatCompletionRouteResult,
+  OpenAIChatRequest,
+  ProviderCandidate,
+  ProviderCooldownStore,
+  ProviderErrorCategory,
+  ProviderStatsById,
+  ProviderStatsRepository,
+  RouterRequest,
+} from "../../shared/signatures";
 import { normalizeRequest, UnsupportedMessageContentError } from "../../router/request-normalizer";
 import { selectProviderCandidates } from "../../router/provider-selector";
 import { rankProviderCandidates } from "../../router/provider-scorer";
 import { runProviderFallback, runProviderStreamFallback } from "../../router/fallback-runner";
 import { createProviderCooldownStore } from "../../router/provider-cooldown";
 import { createOpenAiCompatibleAdapter } from "../../provider/openai-compatible-adapter";
+import type { ProviderAdapter } from "../../provider/provider-adapter";
 import { DEFAULT_DATABASE_PATH } from "../../config/config-loader";
 import { loadProviderRegistry, resolveApiKey } from "../../config/provider-loader";
 import { createProviderStatsRepository, formatStatsDay } from "../../storage/provider-stats.repository";
 import { createSqliteDatabase, migrateSqliteDatabase } from "../../storage/sqlite.database";
+import type { Database } from "bun:sqlite";
 
 const NO_PROVIDER_CODE: ProviderErrorCategory = "no_provider_available";
 const INVALID_REQUEST_CODE: ProviderErrorCategory = "invalid_request";
+const INTERNAL_ERROR_CODE: ProviderErrorCategory = "internal_server_error";
 const NO_PROVIDER_MESSAGE = "No available provider for this request";
+const INTERNAL_ERROR_MESSAGE = "Internal server error";
 
-const cooldownStore = createProviderCooldownStore();
+let cooldownStore = createProviderCooldownStore();
+let cachedDatabase: Database | undefined;
 let cachedProviderStatsRepository: ProviderStatsRepository | undefined;
 let configuredDatabasePath = DEFAULT_DATABASE_PATH;
 
 /**
+ * Resets the module-level routing state (cooldown store and cached repository).
+ * Intended for tests; not needed in normal production use.
+ */
+export function resetChatCompletionRoutingState(): void {
+  cooldownStore = createProviderCooldownStore();
+  if (cachedDatabase !== undefined) {
+    cachedDatabase.close();
+  }
+  cachedDatabase = undefined;
+  cachedProviderStatsRepository = undefined;
+}
+
+/**
  * Configures the SQLite database path used for chat-completion routing stats.
+ * Closes any previously opened database so resources are not leaked when the
+ * path changes (e.g. across test runs or config reloads).
  * @param databasePath  SQLite database path from AppConfig.
  */
 export function configureChatCompletionStorage(databasePath: string): void {
+  if (databasePath === configuredDatabasePath && cachedProviderStatsRepository !== undefined) {
+    return;
+  }
+
+  if (cachedDatabase !== undefined) {
+    cachedDatabase.close();
+  }
+
   configuredDatabasePath = databasePath;
+  cachedDatabase = undefined;
   cachedProviderStatsRepository = undefined;
 }
 
@@ -51,7 +89,10 @@ export class RoutingError extends Error {
  * @returns A JSON completion result or streaming SSE pass-through result.
  * @throws {RoutingError} When no provider is available or all providers fail.
  */
-export async function routeChatCompletion(chatRequest: OpenAIChatRequest): Promise<ChatCompletionRouteResult> {
+export async function routeChatCompletion(
+  chatRequest: OpenAIChatRequest,
+  adapter: ProviderAdapter = createOpenAiCompatibleAdapter(),
+): Promise<ChatCompletionRouteResult> {
   const routerRequest = normalizeRouterRequest(chatRequest);
   const registry = loadProviderRegistry();
 
@@ -98,7 +139,7 @@ export async function routeChatCompletion(chatRequest: OpenAIChatRequest): Promi
     const fallbackInput = {
       request: routerRequest,
       providers: rankedCandidates,
-      adapter: createOpenAiCompatibleAdapter(),
+      adapter,
       resolveApiKey,
       cooldownStore,
       providerStatsRepository,
@@ -111,9 +152,11 @@ export async function routeChatCompletion(chatRequest: OpenAIChatRequest): Promi
 
     return { type: "json", response: await runProviderFallback(fallbackInput) };
   } catch (error) {
-    const err = error as Error & { code?: ProviderErrorCategory };
+    const code = error instanceof Error && "code" in error
+      ? (error.code as ProviderErrorCategory)
+      : undefined;
 
-    throw new RoutingError(err.code ?? NO_PROVIDER_CODE, err.message);
+    throw new RoutingError(code ?? INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE);
   }
 }
 
@@ -137,6 +180,7 @@ function getProviderStatsRepository(): ProviderStatsRepository {
   const database = createSqliteDatabase(configuredDatabasePath);
 
   migrateSqliteDatabase(database);
+  cachedDatabase = database;
   cachedProviderStatsRepository = createProviderStatsRepository(database);
   return cachedProviderStatsRepository;
 }

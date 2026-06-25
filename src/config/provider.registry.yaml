@@ -1,3 +1,7 @@
+# Example provider registry.
+# OmniGate is provider-neutral: edit, add, or remove entries to match whichever
+# services you want to pool. Each provider's `api_key_env` must have a matching
+# value in your `.env` file.
 providers:
   - id: opencode_zen_deepseek
     base_url: "https://opencode.ai/zen/v1"

@@ -83,7 +83,7 @@ function calculateWeightedScore(
     getConfiguredSpeedScore(provider) * weights.configuredSpeed +
     provider.qualityScore * weights.configuredQuality +
     calculateObservedSpeedScore(stats) * weights.observedSpeed +
-    calculateLatencyScore(stats) * weights.latency +
+    calculateLatencyScore(request, stats) * weights.latency +
     calculateFeatureBonus(request, provider) -
     calculateReliabilityPenalty(stats) * weights.reliabilityPenalty -
     calculateRateLimitPenalty(stats) * weights.rateLimitPenalty -
@@ -140,12 +140,20 @@ function calculateObservedSpeedScore(stats: ProviderStatsRecord | undefined): nu
   return clampScore((stats.avgTokensPerSecond / TARGET_TOKENS_PER_SECOND) * MAX_SCORE);
 }
 
-function calculateLatencyScore(stats: ProviderStatsRecord | undefined): number {
-  if (stats?.avgLatencyMs === undefined) {
+function calculateLatencyScore(request: RouterRequest, stats: ProviderStatsRecord | undefined): number {
+  if (stats === undefined) {
     return MIN_SCORE;
   }
 
-  return clampScore(MAX_SCORE - (stats.avgLatencyMs / LATENCY_REFERENCE_MS) * MAX_SCORE);
+  // For streaming requests, time-to-first-token is the meaningful latency signal;
+  // for JSON requests, use end-to-end response time.
+  const latencyMs = request.stream ? stats.avgTimeToFirstTokenMs : stats.avgLatencyMs;
+
+  if (latencyMs === undefined) {
+    return MIN_SCORE;
+  }
+
+  return clampScore(MAX_SCORE - (latencyMs / LATENCY_REFERENCE_MS) * MAX_SCORE);
 }
 
 function calculateReliabilityPenalty(stats: ProviderStatsRecord | undefined): number {

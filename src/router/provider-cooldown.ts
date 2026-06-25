@@ -2,6 +2,7 @@ import type { ProviderCooldownStore } from "../shared/signatures";
 
 const MILLISECONDS_PER_SECOND = 1_000;
 const DEFAULT_COOLDOWN_MS = 60_000;
+const MAX_COOLDOWN_MS = 15 * 60 * 1_000;
 const RETRY_AFTER_HEADER = "retry-after";
 
 /**
@@ -17,10 +18,13 @@ export function createProviderCooldownStore(): ProviderCooldownStore {
     },
 
     setCooldown(providerId: string, cooldownUntilMs: number): void {
-      cooldowns.set(providerId, cooldownUntilMs);
+      pruneExpiredCooldowns(cooldowns, Date.now());
+      cooldowns.set(providerId, Math.min(cooldownUntilMs, Date.now() + MAX_COOLDOWN_MS));
     },
 
     isProviderCoolingDown(providerId: string, nowMs: number): boolean {
+      pruneExpiredCooldowns(cooldowns, nowMs);
+
       const until = cooldowns.get(providerId);
 
       if (until === undefined) {
@@ -30,6 +34,14 @@ export function createProviderCooldownStore(): ProviderCooldownStore {
       return nowMs < until;
     },
   };
+}
+
+function pruneExpiredCooldowns(cooldowns: Map<string, number>, nowMs: number): void {
+  for (const [providerId, until] of cooldowns) {
+    if (nowMs >= until) {
+      cooldowns.delete(providerId);
+    }
+  }
 }
 
 /**

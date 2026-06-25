@@ -9,7 +9,7 @@ One local OpenAI-compatible endpoint that pools free LLM providers behind a sing
 
 ## Why
 
-Switching between OpenCode Zen and OpenRouter free models manually is tedious. OmniGate gives you one stable `baseURL` and one API key — it picks the fastest available free provider for each request, falls back automatically on rate limits or errors, and tracks performance in SQLite so routing improves over time.
+Switching between free LLM providers manually is tedious. OmniGate gives you one stable `baseURL` and one API key — it picks the fastest available provider for each request, falls back automatically on rate limits or errors, and tracks performance in SQLite so routing improves over time.
 
 ## Quick Start
 
@@ -34,15 +34,17 @@ bun run dev
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `OMNIGATE_API_KEY` | Yes | Bearer token clients use to authenticate. Generated automatically by `deploy.sh`. |
-| `OPENCODE_API_KEY` | No | Enables OpenCode Zen providers. |
-| `OPENROUTER_API_KEY` | No | Enables OpenRouter free providers. |
+| `PORT` | No | HTTP port. Defaults to `8787`. |
+| Provider API keys | No | Any keys referenced by `api_key_env` in `src/config/provider.registry.yaml` (e.g. `OPENCODE_API_KEY`, `OPENROUTER_API_KEY`). |
 | `OMNIGATE_DB_PATH` | No | SQLite stats path. Defaults to `.data/omnigate.sqlite`. |
 
 At least one provider key is needed for chat requests to work.
 
-## Use with OpenCode
+To add a new provider, edit `src/config/provider.registry.yaml` and add the matching `api_key_env` value to `.env`.
 
-Add to your OpenCode config:
+## Use with your client
+
+Add to your client config:
 
 ```json
 {
@@ -70,20 +72,36 @@ Add to your OpenCode config:
 
 ## How Routing Works
 
-Each request is matched to an alias, filtered to eligible providers (correct family, API key present, not in cooldown, supports required features), then scored and ranked by:
+Each request is matched to an alias, filtered to eligible providers (correct family, API key present, not in cooldown, supports required features), then scored and ranked by objective signals persisted in SQLite:
 
-1. **Speed** — configured speed score + observed tokens/second.
-2. **Quality** — configured quality score.
-3. **Quota** — daily request pressure vs. configured limits.
-4. **Reliability** — failure and rate-limit penalties from SQLite stats.
+| Signal | What it measures | Source |
+| --- | --- | --- |
+| **Throughput** | Output tokens per second (`completion_tokens / total_latency`). | Observed per successful non-streaming request. |
+| **Latency** | End-to-end response time for JSON requests; time-to-first-token (TTFT) for streaming requests. | Observed per request. |
+| **Quality** | Static quality score for the provider/model. | `quality_score` in `provider.registry.yaml`. |
+| **Reliability** | Failure and rate-limit ratios. | Observed over the current UTC day. |
+| **Quota pressure** | Daily request count vs. configured `rpd` limit. | `rate_limit` in `provider.registry.yaml` + observed requests. |
+| **Feature match** | Whether the provider supports requested tools, JSON mode, or streaming. | `provider.registry.yaml`. |
 
-The highest-scoring provider is tried first. On `429`, `5xx`, timeout, network error, or malformed response, OmniGate falls back to the next provider automatically.
+Routing modes (`balanced`, `speed`, `quality`, `survival`) adjust the weights of these signals. Pass `mode` in the chat request body to override the default:
+
+```json
+{
+  "model": "omnigate/coding-fast",
+  "messages": [{ "role": "user", "content": "hi" }],
+  "mode": "speed"
+}
+```
+
+Alias-level `weights` and `tiebreak` in `provider.registry.yaml` can override mode-based weights for specific models. Set `allow_paid: true` on an alias to include paid-fallback providers in its pool.
+
+The highest-scoring provider is tried first. On `429`, `5xx`, timeout, network error, or malformed response, OmniGate falls back to the next provider automatically. Client errors (4xx other than 429/401/403) stop fallback and are returned to the caller.
 
 ## API
 
 | Endpoint | Auth | Description |
 | --- | --- | --- |
-| `GET /health` | No | Liveness check. Returns `{"status":"ok"}`. |
+| `GET /health` | No | Liveness check. Returns `{"status":"ok","service":"omnigate"}`. |
 | `GET /v1/models` | Yes | Lists available model aliases. |
 | `POST /v1/chat/completions` | Yes | OpenAI-compatible chat completions with automatic provider routing and streaming. |
 

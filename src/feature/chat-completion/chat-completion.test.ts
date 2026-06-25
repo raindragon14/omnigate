@@ -1,11 +1,39 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
+import type { ProviderAdapter } from "../../provider/provider-adapter";
+import type { OpenAIChatCompletionResponse } from "../../shared/signatures";
 import { normalizeRequest } from "../../router/request-normalizer";
-import { routeChatCompletion, RoutingError } from "./chat-completion.service";
+import { resetChatCompletionRoutingState, routeChatCompletion, RoutingError } from "./chat-completion.service";
 
-/** Unit tests for chat-completion feature: request normalisation and routing. */
+const SUCCESS_RESPONSE: OpenAIChatCompletionResponse = {
+  id: "chatcmpl-test",
+  object: "chat.completion",
+  created: 1_700_000_000,
+  model: "omnigate/deepseek-v4-flash-auto",
+  choices: [{ index: 0, message: { role: "assistant", content: "Hello!" }, finish_reason: "stop" }],
+  usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
+};
+
+const originalEnv: Record<string, string | undefined> = {};
+
 describe("chat completion feature", () => {
-  /** Should convert an OpenAI-style request into the internal RouterRequest shape. */
+  beforeAll(() => {
+    originalEnv.OPENCODE_API_KEY = Bun.env.OPENCODE_API_KEY;
+    originalEnv.OPENROUTER_API_KEY = Bun.env.OPENROUTER_API_KEY;
+    Bun.env.OPENCODE_API_KEY = "test-opencode-key";
+    Bun.env.OPENROUTER_API_KEY = "test-openrouter-key";
+  });
+
+  afterAll(() => {
+    Bun.env.OPENCODE_API_KEY = originalEnv.OPENCODE_API_KEY;
+    Bun.env.OPENROUTER_API_KEY = originalEnv.OPENROUTER_API_KEY;
+    resetChatCompletionRoutingState();
+  });
+
+  beforeEach(() => {
+    resetChatCompletionRoutingState();
+  });
+
   test("normalizes OpenAI request to router request", () => {
     const routerRequest = normalizeRequest({
       model: "test-model",
@@ -25,7 +53,6 @@ describe("chat completion feature", () => {
     expect(routerRequest.mode).toBe("balanced");
   });
 
-  /** Should normalize OpenAI text content-part arrays to plain provider text. */
   test("normalizes text-only content parts to string content", () => {
     const routerRequest = normalizeRequest({
       model: "test-model",
@@ -35,14 +62,12 @@ describe("chat completion feature", () => {
     expect(routerRequest.messages).toEqual([{ role: "user", content: "Hello world" }]);
   });
 
-  /** Should default stream to false when the incoming request omits it. */
   test("defaults stream to false when missing", () => {
     const { stream } = normalizeRequest({ model: "test", messages: [{ role: "user", content: "hi" }] });
 
     expect(stream).toBe(false);
   });
 
-  /** Should strip unknown fields (e.g. extra_body) during normalisation. */
   test("strips unknown fields during normalization", () => {
     const routerRequest = normalizeRequest({
       model: "test",
@@ -54,7 +79,6 @@ describe("chat completion feature", () => {
     expect("extra_body" in routerRequest).toBe(false);
   });
 
-  /** Should pass through tools, tool_choice, and response_format. */
   test("passes through tools and response format", () => {
     const routerRequest = normalizeRequest({
       model: "test",
@@ -69,7 +93,6 @@ describe("chat completion feature", () => {
     expect(routerRequest.responseFormat).toEqual({ type: "json_object" });
   });
 
-  /** Should throw a client RoutingError for unsupported non-text content parts. */
   test("throws invalid request for multimodal content parts", async () => {
     try {
       await routeChatCompletion({
@@ -85,7 +108,6 @@ describe("chat completion feature", () => {
     }
   });
 
-  /** Should throw RoutingError when no provider is available for unknown model. */
   test("throws routing error for unknown model", async () => {
     try {
       await routeChatCompletion({ model: "unknown/model", messages: [{ role: "user", content: "hi" }] });
@@ -96,4 +118,65 @@ describe("chat completion feature", () => {
       expect((error as RoutingError).code).toBe("no_provider_available");
     }
   });
+
+  test("returns upstream JSON response through the best provider", async () => {
+    const adapter = createMockAdapter({ json: SUCCESS_RESPONSE });
+    const result = await routeChatCompletion({
+      model: "omnigate/deepseek-v4-flash-auto",
+      messages: [{ role: "user", content: "hi" }],
+    }, adapter);
+
+    expect(result.type).toBe("json");
+    expect(result.response).toEqual(SUCCESS_RESPONSE);
+  });
+
+  test("falls back to the next provider on 429", async () => {
+    const adapter = createMockAdapter({
+      responses: [
+        { status: 429, headers: { "retry-after": "1" }, body: {} },
+        { status: 200, headers: {}, body: SUCCESS_RESPONSE },
+      ],
+    });
+    const result = await routeChatCompletion({
+      model: "omnigate/coding-balanced",
+      messages: [{ role: "user", content: "hi" }],
+    }, adapter);
+
+    expect(result.type).toBe("json");
+    expect(result.response).toEqual(SUCCESS_RESPONSE);
+  });
 });
+
+type MockAdapterOptions =
+  | { json: OpenAIChatCompletionResponse }
+  | { responses: Array<{ status: number; headers: Record<string, string>; body: Record<string, unknown> }> };
+
+function createMockAdapter(options: MockAdapterOptions): ProviderAdapter {
+  let callCount = 0;
+
+  return {
+    id: "mock",
+    supports: () => true,
+    transformRequest: (request, provider, apiKey) => ({
+      url: provider.baseUrl,
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: { model: provider.model, messages: request.messages, stream: request.stream },
+    }),
+    send: async () => {
+      if ("json" in options) {
+        return { status: 200, headers: {}, body: options.json as unknown as Record<string, unknown> };
+      }
+
+      const response = options.responses[callCount++];
+
+      if (response === undefined) {
+        throw new Error("Unexpected mock adapter call");
+      }
+
+      return response;
+    },
+    sendStream: async () => {
+      throw new Error("Mock adapter configured for JSON; sendStream() should not be called");
+    },
+  };
+}

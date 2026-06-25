@@ -1,4 +1,4 @@
-import type { ProviderCandidate, ProviderSelectionInput } from "../shared/signatures";
+import type { AliasConfig, ProviderCandidate, ProviderSelectionInput } from "../shared/signatures";
 
 /**
  * Filters and returns eligible provider candidates for the given request.
@@ -20,7 +20,7 @@ export function selectProviderCandidates(input: ProviderSelectionInput): Provide
   const shouldRequireTools = request.tools !== undefined && request.tools.length > 0;
   const shouldRequireJson = request.responseFormat !== undefined;
 
-  return providers.filter((provider) => isProviderEligible(provider, {
+  return providers.filter((provider) => isProviderEligible(provider, aliasConfig, {
     input,
     shouldAllowPaid,
     shouldRequireTools,
@@ -35,12 +35,15 @@ type ProviderEligibilityOptions = {
   shouldRequireJson: boolean;
 };
 
-function isProviderEligible(provider: ProviderCandidate, options: ProviderEligibilityOptions): boolean {
+function isProviderEligible(
+  provider: ProviderCandidate,
+  aliasConfig: AliasConfig,
+  options: ProviderEligibilityOptions,
+): boolean {
   const { input, shouldAllowPaid, shouldRequireTools, shouldRequireJson } = options;
-  const { request, aliases, cooldownStore, resolveApiKey, nowMs } = input;
-  const aliasConfig = aliases[request.model];
+  const { request, cooldownStore, resolveApiKey, nowMs } = input;
 
-  if (aliasConfig === undefined || !aliasConfig.families.includes(provider.family)) {
+  if (!aliasConfig.families.includes(provider.family)) {
     return false;
   }
 

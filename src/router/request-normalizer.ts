@@ -36,11 +36,15 @@ export function normalizeRequest(request: OpenAIChatRequest): RouterRequest {
 function normalizeMessage(message: ChatMessage): RouterChatMessage {
   return {
     ...message,
-    content: normalizeMessageContent(message.content),
+    content: normalizeMessageContent(message.role, message.content),
   };
 }
 
-function normalizeMessageContent(content: ChatMessage["content"]): string | null {
+function normalizeMessageContent(role: ChatMessage["role"], content: ChatMessage["content"]): string | null {
+  if (content === null && role !== "assistant" && role !== "tool") {
+    throw new UnsupportedMessageContentError(`content cannot be null for ${role} messages`);
+  }
+
   if (!Array.isArray(content)) {
     return content;
   }

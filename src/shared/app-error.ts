@@ -37,7 +37,9 @@ export function registerAppErrorHandler(app: Hono): void {
     return sendAppError(context, appError);
   });
 
-  app.onError((_error, context) => {
+  app.onError((error, context) => {
+    console.error("Unhandled error:", error);
+
     const appError = createAppError(
       INTERNAL_SERVER_ERROR_CODE,
       INTERNAL_SERVER_ERROR_MESSAGE,

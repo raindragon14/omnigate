@@ -340,6 +340,7 @@ describe("fallback runner", () => {
 
       expect(repository.updates[0]?.status).toBe("success");
       expect(repository.updates[0]?.timeToFirstTokenMs).toBeGreaterThan(0);
+      expect(repository.updates[0]?.latencyMs).toBeUndefined();
     });
   });
 

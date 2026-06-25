@@ -1,7 +1,7 @@
 import type {
   FallbackRunnerInput,
-  OpenAIChatStreamResponse,
   OpenAIChatCompletionResponse,
+  OpenAIChatStreamResponse,
   ProviderAttemptStatus,
   ProviderCandidate,
   ProviderErrorCategory,
@@ -11,15 +11,16 @@ import type {
 import { computeCooldownUntil } from "./provider-cooldown";
 
 const NO_PROVIDER_CODE: ProviderErrorCategory = "no_provider_available";
-const NO_PROVIDER_MESSAGE = "No available provider for this request";
-const ALL_PROVIDERS_FAILED_MESSAGE = "All providers failed to handle this request";
-
+const INVALID_REQUEST_CODE: ProviderErrorCategory = "invalid_request";
 const RATE_LIMITED_CODE: ProviderErrorCategory = "provider_rate_limited";
 const SERVER_ERROR_CODE: ProviderErrorCategory = "provider_server_error";
 const AUTH_ERROR_CODE: ProviderErrorCategory = "provider_auth_error";
 const TIMEOUT_CODE: ProviderErrorCategory = "provider_timeout";
 const NETWORK_ERROR_CODE: ProviderErrorCategory = "provider_network_error";
 const MALFORMED_RESPONSE_CODE: ProviderErrorCategory = "provider_malformed_response";
+
+const NO_PROVIDER_MESSAGE = "No available provider for this request";
+const ALL_PROVIDERS_FAILED_MESSAGE = "All providers failed to handle this request";
 const MILLISECONDS_PER_SECOND = 1_000;
 
 /**
@@ -41,11 +42,11 @@ export function classifyProviderError(response: ProviderResponse | undefined, er
     return NETWORK_ERROR_CODE;
   }
 
-  const status = response.status;
-
   if (response.isMalformed === true) {
     return MALFORMED_RESPONSE_CODE;
   }
+
+  const status = response.status;
 
   if (status === 429) {
     return RATE_LIMITED_CODE;
@@ -59,13 +60,18 @@ export function classifyProviderError(response: ProviderResponse | undefined, er
     return SERVER_ERROR_CODE;
   }
 
+  if (status >= 400 && status < 500) {
+    return INVALID_REQUEST_CODE;
+  }
+
   return MALFORMED_RESPONSE_CODE;
 }
 
 /**
  * Routes the request through the ranked provider list, attempting fallback
  * on rate-limited, timeout, server-error, network-error, and malformed-response
- * failures.  On rate-limit, sets cooldown.
+ * failures. On rate-limit, sets cooldown. Stops fallback on client errors (4xx
+ * other than 429/401/403) and auth errors.
  * @param input  Fallback runner parameters.
  * @returns The first successful OpenAI-compatible response.
  * @throws Error when all providers fail.
@@ -106,10 +112,7 @@ export async function runProviderFallback(input: FallbackRunnerInput): Promise<O
         continue;
       }
 
-      const thrownError = error as Error & { code?: ProviderErrorCategory };
-
-      thrownError.code = category;
-      throw thrownError;
+      throw createProviderError(category, error instanceof Error ? error.message : ALL_PROVIDERS_FAILED_MESSAGE);
     }
   }
 
@@ -139,6 +142,10 @@ export async function runProviderStreamFallback(input: FallbackRunnerInput): Pro
     }
 
     lastCategory = result.category;
+
+    if (!shouldContinueFallback(result.category)) {
+      break;
+    }
   }
 
   throw createProviderError(lastCategory, ALL_PROVIDERS_FAILED_MESSAGE);
@@ -168,7 +175,7 @@ async function tryStreamProvider(
   } catch (error) {
     const category = classifyProviderError(undefined, error);
 
-    recordProviderStats(input, provider, category, 0);
+    recordProviderStats(input, provider, category, elapsedMs(input, input.nowMs()));
     return { category };
   }
 }
@@ -203,18 +210,14 @@ async function attemptProvider(provider: ProviderCandidate, input: FallbackRunne
   const latencyMs = elapsedMs(input, startedAtMs);
 
   if (providerResponse.status === 200 && isOpenAiChatCompletionResponse(providerResponse.body)) {
-    const response = providerResponse.body as unknown as OpenAIChatCompletionResponse;
-
-    recordProviderStats(input, provider, NO_PROVIDER_CODE, latencyMs, response);
-    return { response, category: NO_PROVIDER_CODE };
+    recordProviderStats(input, provider, NO_PROVIDER_CODE, latencyMs, providerResponse.body);
+    return { response: providerResponse.body, category: NO_PROVIDER_CODE };
   }
 
   const category = classifyProviderError(providerResponse, undefined);
-  let cooldownUntil: number | undefined;
-
-  if (category === RATE_LIMITED_CODE) {
-    cooldownUntil = setProviderCooldown(provider, providerResponse, input);
-  }
+  const cooldownUntil = category === RATE_LIMITED_CODE
+    ? setProviderCooldownFromHeaders(provider, providerResponse.headers, input)
+    : undefined;
 
   recordProviderStats(input, provider, category, latencyMs, undefined, cooldownUntil);
 
@@ -235,8 +238,12 @@ async function attemptStreamProvider(
     return { response: createStreamResponse(providerResponse, provider, input, startedAtMs), category: NO_PROVIDER_CODE };
   }
 
+  await consumeResponseBody(providerResponse);
+
   const category = classifyStreamProviderError(providerResponse);
-  const cooldownUntil = category === RATE_LIMITED_CODE ? setProviderCooldownFromHeaders(provider, providerResponse.headers, input) : undefined;
+  const cooldownUntil = category === RATE_LIMITED_CODE
+    ? setProviderCooldownFromHeaders(provider, providerResponse.headers, input)
+    : undefined;
 
   recordProviderStats(input, provider, category, latencyMs, undefined, cooldownUntil);
   return { category };
@@ -249,14 +256,6 @@ function hasProviderApiKey(
   const apiKey = resolveApiKey(provider.apiKeyEnv);
 
   return apiKey !== undefined && apiKey !== "";
-}
-
-function setProviderCooldown(
-  provider: ProviderCandidate,
-  response: ProviderResponse,
-  input: FallbackRunnerInput,
-): number {
-  return setProviderCooldownFromHeaders(provider, response.headers, input);
 }
 
 function setProviderCooldownFromHeaders(
@@ -274,7 +273,7 @@ function recordProviderStats(
   input: FallbackRunnerInput,
   provider: ProviderCandidate,
   category: ProviderErrorCategory,
-  latencyMs: number,
+  latencyMs?: number,
   response?: OpenAIChatCompletionResponse,
   cooldownUntil?: number,
   timeToFirstTokenMs?: number,
@@ -297,13 +296,13 @@ function recordProviderStats(
 }
 
 function createStreamResponse(
-  response: ProviderStreamResponse,
+  response: ProviderStreamResponse & { stream: ReadableStream<Uint8Array> },
   provider: ProviderCandidate,
   input: FallbackRunnerInput,
   startedAtMs: number,
 ): OpenAIChatStreamResponse {
   return {
-    stream: trackFirstStreamChunk(response.stream!, () => recordStreamSuccess(input, provider, startedAtMs)),
+    stream: trackFirstStreamChunk(response.stream, () => recordStreamSuccess(input, provider, startedAtMs)),
     headers: response.headers,
   };
 }
@@ -326,10 +325,12 @@ function trackFirstStreamChunk(stream: ReadableStream<Uint8Array>, onFirstChunk:
 function recordStreamSuccess(input: FallbackRunnerInput, provider: ProviderCandidate, startedAtMs: number): void {
   const timeToFirstTokenMs = elapsedMs(input, startedAtMs);
 
-  recordProviderStats(input, provider, NO_PROVIDER_CODE, timeToFirstTokenMs, undefined, undefined, timeToFirstTokenMs);
+  // Streaming only gives us time-to-first-token; end-to-end latency is unknown
+  // until the client consumes the full stream, so we record TTFT on its own.
+  recordProviderStats(input, provider, NO_PROVIDER_CODE, undefined, undefined, undefined, timeToFirstTokenMs);
 }
 
-function isSuccessfulStreamResponse(response: ProviderStreamResponse): boolean {
+function isSuccessfulStreamResponse(response: ProviderStreamResponse): response is ProviderStreamResponse & { stream: ReadableStream<Uint8Array> } {
   return response.status === 200 && response.stream !== undefined;
 }
 
@@ -350,10 +351,13 @@ function toAttemptStatus(category: ProviderErrorCategory): ProviderAttemptStatus
   return category === RATE_LIMITED_CODE ? "rate_limited" : "failure";
 }
 
-function calculateTokensPerSecond(response: OpenAIChatCompletionResponse | undefined, latencyMs: number): number | undefined {
+function calculateTokensPerSecond(
+  response: OpenAIChatCompletionResponse | undefined,
+  latencyMs: number | undefined,
+): number | undefined {
   const completionTokens = response?.usage?.completion_tokens;
 
-  if (completionTokens === undefined || latencyMs <= 0) {
+  if (completionTokens === undefined || latencyMs === undefined || latencyMs <= 0) {
     return undefined;
   }
 
@@ -365,7 +369,7 @@ function elapsedMs(input: FallbackRunnerInput, startedAtMs: number): number {
 }
 
 function shouldContinueFallback(category: ProviderErrorCategory): boolean {
-  return category === AUTH_ERROR_CODE || isFallbackWorthy(category);
+  return isFallbackWorthy(category);
 }
 
 function isFallbackWorthy(category: ProviderErrorCategory): boolean {
@@ -385,7 +389,7 @@ function createProviderError(code: ProviderErrorCategory, message: string): Erro
   return error;
 }
 
-function isOpenAiChatCompletionResponse(body: Record<string, unknown>): boolean {
+function isOpenAiChatCompletionResponse(body: Record<string, unknown>): body is OpenAIChatCompletionResponse {
   return (
     typeof body.id === "string" &&
     typeof body.object === "string" &&
@@ -393,4 +397,16 @@ function isOpenAiChatCompletionResponse(body: Record<string, unknown>): boolean 
     typeof body.model === "string" &&
     Array.isArray(body.choices)
   );
+}
+
+async function consumeResponseBody(response: ProviderStreamResponse): Promise<void> {
+  if (response.stream === undefined) {
+    return;
+  }
+
+  try {
+    await response.stream.cancel();
+  } catch {
+    // Best-effort cleanup; the body may already be consumed or the connection closed.
+  }
 }

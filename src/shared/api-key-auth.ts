@@ -15,8 +15,10 @@ const UNAUTHORIZED_MESSAGE = "Unauthorized";
  * @param apiKey  The expected OmniGate API key.
  */
 export function registerApiKeyAuth(app: Hono, apiKey: string): void {
+  const expectedAuthorization = Buffer.from(`Bearer ${apiKey}`);
+
   app.use(AUTH_ROUTE_PATTERN, async (context, next) => {
-    if (isAuthorized(context.req.header(AUTHORIZATION_HEADER), apiKey)) {
+    if (isAuthorized(context.req.header(AUTHORIZATION_HEADER), expectedAuthorization)) {
       await next();
       return;
     }
@@ -30,23 +32,22 @@ export function registerApiKeyAuth(app: Hono, apiKey: string): void {
  *
  * Uses timingSafeEqual to prevent timing side-channel attacks where an
  * attacker measures response-time differences to infer the API key
- * character-by-character.  At the key lengths OmniGate uses (64 hex chars),
+ * character-by-character. At the key lengths OmniGate uses (64 hex chars),
  * the practical risk is negligible — this is defense-in-depth to ensure
  * correctness regardless of key format or runtime behavior.
  */
-function isAuthorized(rawAuthorization: string | undefined, apiKey: string): boolean {
+function isAuthorized(rawAuthorization: string | undefined, expectedAuthorization: Buffer): boolean {
   if (rawAuthorization === undefined) {
     return false;
   }
 
-  const expected = Buffer.from(`Bearer ${apiKey}`);
   const input = Buffer.from(rawAuthorization);
 
-  if (expected.length !== input.length) {
+  if (expectedAuthorization.length !== input.length) {
     return false;
   }
 
-  return timingSafeEqual(expected, input);
+  return timingSafeEqual(expectedAuthorization, input);
 }
 
 function sendUnauthorized(context: Context): Response {

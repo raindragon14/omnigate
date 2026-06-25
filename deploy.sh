@@ -69,7 +69,7 @@ if [ ! -f .env ]; then
   echo "║  Created  $APP_DIR/.env"
   echo "║  with a generated OMNIGATE_API_KEY.                 ║"
   echo "║                                                     ║"
-  echo "║  Add OPENCODE_API_KEY or OPENROUTER_API_KEY         ║"
+  echo "║  Add provider API keys                              ║"
   echo "║  to enable upstream providers, then run:            ║"
   echo "║                                                     ║"
   echo "║    docker compose up -d                             ║"
@@ -78,7 +78,9 @@ if [ ! -f .env ]; then
   echo "║  requests will fail until one provider key is set.   ║"
   echo "╚══════════════════════════════════════════════════════╝"
   echo ""
-  read -r -p "Press Enter to continue, or Ctrl+C to edit .env first..."
+  if [ -t 0 ]; then
+    read -r -p "Press Enter to continue, or Ctrl+C to edit .env first..."
+  fi
 fi
 
 echo "==> Building and starting OmniGate..."

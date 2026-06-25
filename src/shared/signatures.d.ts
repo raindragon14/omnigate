@@ -162,12 +162,14 @@ export declare function createAppError(code: string, message: string, statusCode
 /** Routing mode that influences provider scoring. */
 export type RoutingMode = "balanced" | "quality" | "speed" | "survival";
 
+/** A text content part in an OpenAI-compatible chat message. */
 export type ChatMessageTextContentPart = {
   type: "text";
   text: string;
   [key: string]: unknown;
 };
 
+/** A content part in a chat message; text parts or unknown provider-specific parts. */
 export type ChatMessageContentPart = ChatMessageTextContentPart | {
   type: string;
   [key: string]: unknown;
@@ -182,6 +184,7 @@ export type ChatMessage = {
   tool_calls?: unknown[] | undefined;
 };
 
+/** Chat message with content normalised to a plain string or null for routing. */
 export type RouterChatMessage = Omit<ChatMessage, "content"> & {
   content: string | null;
 };
@@ -250,8 +253,11 @@ export type AliasWeights = {
 /** How to break ties when scores are equal. */
 export type TiebreakMode = "priority" | "speed" | "quality";
 
+/** Configuration for a model alias that maps a public model name to provider families. */
 export type AliasConfig = {
+  /** Provider families eligible for this alias. */
   families: string[];
+  /** When true, providers marked as paid fallbacks may be selected. */
   allow_paid?: boolean | undefined;
   /** Override scoring weights for this alias. When set, overrides mode-based weights. */
   weights?: AliasWeights | undefined;
@@ -311,7 +317,8 @@ export type ProviderStatsUpdate = {
   providerId: string;
   modelFamily: string;
   status: ProviderAttemptStatus;
-  latencyMs: number;
+  /** End-to-end request latency. Optional for streaming, where only time-to-first-token is known. */
+  latencyMs?: number | undefined;
   tokenCount?: number | undefined;
   tokensPerSecond?: number | undefined;
   timeToFirstTokenMs?: number | undefined;
@@ -495,7 +502,8 @@ export type ProviderErrorCategory =
   | "provider_malformed_response"
   | "provider_network_error"
   | "no_provider_available"
-  | "invalid_request";
+  | "invalid_request"
+  | "internal_server_error";
 
 /**
  * Custom error with a machine-readable code that the controller uses to

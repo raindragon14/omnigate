@@ -3,7 +3,7 @@ import { parse } from "yaml";
 import { join } from "path";
 import { z } from "zod";
 
-import type { AliasConfig, ProviderCandidate, ProviderRateLimit, ProviderRegistry } from "../shared/signatures";
+import type { ProviderCandidate, ProviderRateLimit, ProviderRegistry } from "../shared/signatures";
 
 const PROVIDER_REGISTRY_PATH = "provider.registry.yaml";
 const MIN_SCORE = 0;

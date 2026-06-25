@@ -1,6 +1,11 @@
-import type { Database } from "bun:sqlite";
+import type { Database, Statement } from "bun:sqlite";
 
-import type { ProviderAttemptStatus, ProviderStatsRecord, ProviderStatsRepository, ProviderStatsUpdate } from "../shared/signatures";
+import type {
+  ProviderAttemptStatus,
+  ProviderStatsRecord,
+  ProviderStatsRepository,
+  ProviderStatsUpdate,
+} from "../shared/signatures";
 
 const DAY_SLICE_START = 0;
 const DAY_SLICE_END = 10;
@@ -22,16 +27,52 @@ type ProviderStatsRow = {
   cooldown_until: number | null;
 };
 
+type PreparedStatements = {
+  getStats: Statement<ProviderStatsRow, [string, string, string]>;
+  getCooldown: Statement<{ cooldown_until: number | null }, [string, string]>;
+  upsertStats: Statement<unknown, [string, string, string, number, number, number, number, number, number | null, number | null, number | null, number | null]>;
+};
+
 /**
  * Creates a provider stats repository backed by SQLite.
  * @param database  Open SQLite database connection.
  * @returns A ProviderStatsRepository instance.
  */
 export function createProviderStatsRepository(database: Database): ProviderStatsRepository {
+  const statements = prepareStatements(database);
+
   return {
-    getProviderStats: (providerId, modelFamily, day) => getProviderStats(database, providerId, modelFamily, day),
-    recordProviderAttempt: (update) => recordProviderAttempt(database, update),
-    getCooldownUntil: (providerId, modelFamily) => getCooldownUntil(database, providerId, modelFamily),
+    getProviderStats: (providerId, modelFamily, day) => getProviderStats(statements, providerId, modelFamily, day),
+    recordProviderAttempt: (update) => recordProviderAttempt(database, statements, update),
+    getCooldownUntil: (providerId, modelFamily) => getCooldownUntil(statements, providerId, modelFamily),
+  };
+}
+
+function prepareStatements(database: Database): PreparedStatements {
+  return {
+    getStats: database.query<ProviderStatsRow, [string, string, string]>(`
+      SELECT * FROM provider_stats WHERE provider_id = ? AND model_family = ? AND day = ?
+    `),
+    getCooldown: database.query<{ cooldown_until: number | null }, [string, string]>(`
+      SELECT MAX(cooldown_until) AS cooldown_until FROM provider_stats WHERE provider_id = ? AND model_family = ?
+    `),
+    upsertStats: database.query(`
+      INSERT INTO provider_stats (
+        provider_id, model_family, day, request_count, token_count, success_count,
+        failure_count, rate_limit_count, avg_latency_ms, avg_tokens_per_second,
+        avg_time_to_first_token_ms, cooldown_until
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(provider_id, model_family, day) DO UPDATE SET
+        request_count = excluded.request_count,
+        token_count = excluded.token_count,
+        success_count = excluded.success_count,
+        failure_count = excluded.failure_count,
+        rate_limit_count = excluded.rate_limit_count,
+        avg_latency_ms = excluded.avg_latency_ms,
+        avg_tokens_per_second = excluded.avg_tokens_per_second,
+        avg_time_to_first_token_ms = excluded.avg_time_to_first_token_ms,
+        cooldown_until = excluded.cooldown_until
+    `),
   };
 }
 
@@ -45,30 +86,37 @@ export function formatStatsDay(nowMs: number): string {
 }
 
 function getProviderStats(
-  database: Database,
+  statements: PreparedStatements,
   providerId: string,
   modelFamily: string,
   day: string,
 ): ProviderStatsRecord | undefined {
-  const row = database.query<ProviderStatsRow, [string, string, string]>(`
-    SELECT * FROM provider_stats WHERE provider_id = ? AND model_family = ? AND day = ?
-  `).get(providerId, modelFamily, day);
+  const row = statements.getStats.get(providerId, modelFamily, day);
 
   return row === null ? undefined : toStatsRecord(row);
 }
 
-function recordProviderAttempt(database: Database, update: ProviderStatsUpdate): void {
+function recordProviderAttempt(
+  database: Database,
+  statements: PreparedStatements,
+  update: ProviderStatsUpdate,
+): void {
   const day = formatStatsDay(update.nowMs);
-  const current = getProviderStats(database, update.providerId, update.modelFamily, day);
-  const next = applyStatsUpdate(current, update, day);
 
-  saveProviderStats(database, next);
+  database.transaction(() => {
+    const current = getProviderStats(statements, update.providerId, update.modelFamily, day);
+    const next = applyStatsUpdate(current, update, day);
+
+    saveProviderStats(statements, next);
+  })();
 }
 
-function getCooldownUntil(database: Database, providerId: string, modelFamily: string): number | undefined {
-  const row = database.query<{ cooldown_until: number | null }, [string, string]>(`
-    SELECT MAX(cooldown_until) AS cooldown_until FROM provider_stats WHERE provider_id = ? AND model_family = ?
-  `).get(providerId, modelFamily);
+function getCooldownUntil(
+  statements: PreparedStatements,
+  providerId: string,
+  modelFamily: string,
+): number | undefined {
+  const row = statements.getCooldown.get(providerId, modelFamily);
 
   return row?.cooldown_until ?? undefined;
 }
@@ -90,20 +138,22 @@ function applyStatsUpdate(
     failureCount: (current?.failureCount ?? 0) + failureIncrement(update.status),
     rateLimitCount: (current?.rateLimitCount ?? 0) + rateLimitIncrement(update.status),
     avgLatencyMs: calculateAverage(current?.avgLatencyMs, current?.requestCount ?? 0, update.latencyMs),
-    avgTokensPerSecond: calculateAverage(current?.avgTokensPerSecond, current?.requestCount ?? 0, update.tokensPerSecond),
-    avgTimeToFirstTokenMs: calculateAverage(current?.avgTimeToFirstTokenMs, current?.requestCount ?? 0, update.timeToFirstTokenMs),
+    avgTokensPerSecond: calculateAverage(
+      current?.avgTokensPerSecond,
+      current?.requestCount ?? 0,
+      update.tokensPerSecond,
+    ),
+    avgTimeToFirstTokenMs: calculateAverage(
+      current?.avgTimeToFirstTokenMs,
+      current?.requestCount ?? 0,
+      update.timeToFirstTokenMs,
+    ),
     cooldownUntil: update.cooldownUntil ?? current?.cooldownUntil,
   };
 }
 
-function saveProviderStats(database: Database, record: ProviderStatsRecord): void {
-  database.query(`
-    INSERT OR REPLACE INTO provider_stats (
-      provider_id, model_family, day, request_count, token_count, success_count,
-      failure_count, rate_limit_count, avg_latency_ms, avg_tokens_per_second,
-      avg_time_to_first_token_ms, cooldown_until
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+function saveProviderStats(statements: PreparedStatements, record: ProviderStatsRecord): void {
+  statements.upsertStats.run(
     record.providerId,
     record.modelFamily,
     record.day,
@@ -136,7 +186,11 @@ function toStatsRecord(row: ProviderStatsRow): ProviderStatsRecord {
   };
 }
 
-function calculateAverage(current: number | undefined, sampleCount: number, sample: number | undefined): number | undefined {
+function calculateAverage(
+  current: number | undefined,
+  sampleCount: number,
+  sample: number | undefined,
+): number | undefined {
   if (sample === undefined) {
     return current;
   }
