@@ -74,7 +74,7 @@ describe("chat completion integration", () => {
         method: "POST",
         headers: AUTH_HEADERS,
         body: JSON.stringify({
-          model: "omnigate/deepseek-v4-flash-auto",
+          model: "omnigate/auto-fast",
           messages: [{ role: "user", content: "hi" }],
         }),
       });
@@ -94,7 +94,7 @@ describe("chat completion integration", () => {
         method: "POST",
         headers: AUTH_HEADERS,
         body: JSON.stringify({
-          model: "omnigate/deepseek-v4-flash-auto",
+          model: "omnigate/auto-fast",
           messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
         }),
       });
@@ -113,7 +113,7 @@ describe("chat completion integration", () => {
       method: "POST",
       headers: AUTH_HEADERS,
       body: JSON.stringify({
-        model: "omnigate/deepseek-v4-flash-auto",
+        model: "omnigate/auto-fast",
         messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/image.png" } }] }],
       }),
     });

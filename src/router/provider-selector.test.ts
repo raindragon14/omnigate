@@ -5,27 +5,27 @@ import { createProviderCooldownStore } from "./provider-cooldown";
 import { selectProviderCandidates } from "./provider-selector";
 
 const ALL_PROVIDERS: ProviderCandidate[] = [
-  { id: "alpha", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 80, qualityScore: 80, enabled: true, paidFallback: false, apiKeyEnv: "KEY_A", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "beta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 90, qualityScore: 90, enabled: true, paidFallback: false, apiKeyEnv: "KEY_B", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "gamma", baseUrl: "", model: "", family: "mimo-v2.5", priority: 100, qualityScore: 85, enabled: true, paidFallback: false, apiKeyEnv: "KEY_C", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "delta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 70, qualityScore: 70, enabled: false, paidFallback: false, apiKeyEnv: "KEY_D", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "epsilon", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 50, qualityScore: 50, enabled: true, paidFallback: true, apiKeyEnv: "KEY_E", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "zeta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 60, qualityScore: 60, enabled: true, paidFallback: false, apiKeyEnv: "KEY_F", context: 100000, supportsTools: false, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "eta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 55, qualityScore: 55, enabled: true, paidFallback: false, apiKeyEnv: "KEY_G", context: 100000, supportsTools: true, supportsJson: false, supportsStreaming: true, rateLimit: {} },
-  { id: "theta", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 45, qualityScore: 45, enabled: true, paidFallback: false, apiKeyEnv: "KEY_H", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: false, rateLimit: {} },
-  { id: "iota", baseUrl: "", model: "", family: "deepseek-v4-flash", priority: 35, qualityScore: 35, enabled: true, paidFallback: false, apiKeyEnv: "KEY_I", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "alpha", baseUrl: "", model: "", family: "chat-fast", priority: 80, qualityScore: 80, enabled: true, paidFallback: false, apiKeyEnv: "KEY_A", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "beta", baseUrl: "", model: "", family: "chat-fast", priority: 90, qualityScore: 90, enabled: true, paidFallback: false, apiKeyEnv: "KEY_B", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "gamma", baseUrl: "", model: "", family: "chat-quality", priority: 100, qualityScore: 85, enabled: true, paidFallback: false, apiKeyEnv: "KEY_C", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "delta", baseUrl: "", model: "", family: "chat-fast", priority: 70, qualityScore: 70, enabled: false, paidFallback: false, apiKeyEnv: "KEY_D", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "epsilon", baseUrl: "", model: "", family: "chat-fast", priority: 50, qualityScore: 50, enabled: true, paidFallback: true, apiKeyEnv: "KEY_E", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "zeta", baseUrl: "", model: "", family: "chat-fast", priority: 60, qualityScore: 60, enabled: true, paidFallback: false, apiKeyEnv: "KEY_F", context: 100000, supportsTools: false, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "eta", baseUrl: "", model: "", family: "chat-fast", priority: 55, qualityScore: 55, enabled: true, paidFallback: false, apiKeyEnv: "KEY_G", context: 100000, supportsTools: true, supportsJson: false, supportsStreaming: true, rateLimit: {} },
+  { id: "theta", baseUrl: "", model: "", family: "chat-fast", priority: 45, qualityScore: 45, enabled: true, paidFallback: false, apiKeyEnv: "KEY_H", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: false, rateLimit: {} },
+  { id: "iota", baseUrl: "", model: "", family: "chat-fast", priority: 35, qualityScore: 35, enabled: true, paidFallback: false, apiKeyEnv: "KEY_I", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
 ];
 
 const MOCK_ALIASES = {
-  "omnigate/deepseek-v4-flash-auto": { families: ["deepseek-v4-flash"] },
-  "omnigate/mimo-v2.5-auto": { families: ["mimo-v2.5"] },
+  "omnigate/auto-fast": { families: ["chat-fast"] },
+  "omnigate/auto-quality": { families: ["chat-quality"] },
 };
 
 const NOW_MS = 1_000_000;
 
 function makeInput(overrides: Partial<ProviderSelectionInput> = {}): ProviderSelectionInput {
   return {
-    request: { model: "omnigate/deepseek-v4-flash-auto", messages: [{ role: "user", content: "hi" }], stream: false, mode: "balanced" },
+    request: { model: "omnigate/auto-fast", messages: [{ role: "user", content: "hi" }], stream: false, mode: "balanced" },
     providers: ALL_PROVIDERS,
     aliases: MOCK_ALIASES,
     cooldownStore: createProviderCooldownStore(),
@@ -62,7 +62,7 @@ describe("selectProviderCandidates", () => {
 
   test("excludes providers outside alias family", () => {
     const result = selectProviderCandidates(makeInput({
-      request: { model: "omnigate/deepseek-v4-flash-auto", messages: [], stream: false, mode: "balanced" },
+      request: { model: "omnigate/auto-fast", messages: [], stream: false, mode: "balanced" },
     }));
 
     expect(result.some((provider) => provider.id === "gamma")).toBe(false);
@@ -104,7 +104,7 @@ describe("selectProviderCandidates", () => {
 
   test("excludes providers without tool support when request has tools", () => {
     const result = selectProviderCandidates(makeInput({
-      request: { model: "omnigate/deepseek-v4-flash-auto", messages: [], stream: false, mode: "balanced", tools: [{ type: "function" }] },
+      request: { model: "omnigate/auto-fast", messages: [], stream: false, mode: "balanced", tools: [{ type: "function" }] },
     }));
 
     expect(result.some((provider) => provider.id === "zeta")).toBe(false);
@@ -113,7 +113,7 @@ describe("selectProviderCandidates", () => {
 
   test("excludes providers without JSON support when request has response_format", () => {
     const result = selectProviderCandidates(makeInput({
-      request: { model: "omnigate/deepseek-v4-flash-auto", messages: [], stream: false, mode: "balanced", responseFormat: { type: "json_object" } },
+      request: { model: "omnigate/auto-fast", messages: [], stream: false, mode: "balanced", responseFormat: { type: "json_object" } },
     }));
 
     expect(result.some((provider) => provider.id === "eta")).toBe(false);
@@ -122,7 +122,7 @@ describe("selectProviderCandidates", () => {
 
   test("excludes providers without streaming support when request is streaming", () => {
     const result = selectProviderCandidates(makeInput({
-      request: { model: "omnigate/deepseek-v4-flash-auto", messages: [], stream: true, mode: "balanced" },
+      request: { model: "omnigate/auto-fast", messages: [], stream: true, mode: "balanced" },
     }));
 
     expect(result.some((provider) => provider.id === "theta")).toBe(false);
@@ -131,10 +131,10 @@ describe("selectProviderCandidates", () => {
 
   test("matches correct family", () => {
     const result = selectProviderCandidates(makeInput({
-      request: { model: "omnigate/mimo-v2.5-auto", messages: [], stream: false, mode: "balanced" },
+      request: { model: "omnigate/auto-quality", messages: [], stream: false, mode: "balanced" },
     }));
 
-    expect(result.every((provider) => provider.family === "mimo-v2.5")).toBe(true);
+    expect(result.every((provider) => provider.family === "chat-quality")).toBe(true);
     expect(result.some((provider) => provider.id === "gamma")).toBe(true);
   });
 });

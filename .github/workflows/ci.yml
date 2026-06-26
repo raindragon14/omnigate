@@ -80,7 +80,7 @@ jobs:
       - name: Smoke test — verify /v1/models
         run: |
           body=$(curl -s -H "Authorization: Bearer ci-omnigate-key" http://localhost:8787/v1/models)
-          echo "$body" | grep -q 'omnigate/deepseek-v4-flash-auto' || { echo "Models endpoint missing aliases"; exit 1; }
+          echo "$body" | grep -q 'omnigate/auto-fast' || { echo "Models endpoint missing aliases"; exit 1; }
 
       - name: Clean up container
         if: always()

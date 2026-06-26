@@ -7,7 +7,7 @@ const PROVIDER: ProviderCandidate = {
   id: "alpha",
   baseUrl: "https://example.com/v1",
   model: "provider-model",
-  family: "deepseek-v4-flash",
+  family: "chat-fast",
   priority: 100,
   qualityScore: 90,
   speedScore: 85,
@@ -25,7 +25,7 @@ describe("openai-compatible adapter", () => {
   test("forwards tool and JSON request fields", () => {
     const adapter = createOpenAiCompatibleAdapter();
     const request: RouterRequest = {
-      model: "omnigate/deepseek-v4-flash-auto",
+      model: "omnigate/auto-fast",
       messages: [{ role: "user", content: "Return JSON" }],
       stream: false,
       mode: "balanced",

@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { ProviderCandidate, ProviderStatsRecord, RouterRequest } from "../shared/signatures";
 import { rankProviderCandidates, scoreProvider } from "./provider-scorer";
 
-const FAMILY = "deepseek-v4-flash";
+const FAMILY = "chat-fast";
 const DAY = "2026-01-02";
 
 function makeProvider(overrides: Partial<ProviderCandidate> = {}): ProviderCandidate {

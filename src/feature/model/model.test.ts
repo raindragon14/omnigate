@@ -4,9 +4,9 @@ import { listRouterModels } from "./model.service";
 
 const EXPECTED_MODEL_LIST_OBJECT = "list";
 const EXPECTED_MODEL_IDS = [
-  "omnigate/deepseek-v4-flash-auto",
-  "omnigate/mimo-v2.5-auto",
-  "omnigate/coding-balanced",
+  "omnigate/auto-fast",
+  "omnigate/auto-quality",
+  "omnigate/coding-auto",
   "omnigate/coding-fast",
 ];
 

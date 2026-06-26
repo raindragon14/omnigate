@@ -9,7 +9,7 @@ const SUCCESS_RESPONSE: OpenAIChatCompletionResponse = {
   id: "chatcmpl-test",
   object: "chat.completion",
   created: 1_700_000_000,
-  model: "omnigate/deepseek-v4-flash-auto",
+  model: "omnigate/auto-fast",
   choices: [{ index: 0, message: { role: "assistant", content: "Hello!" }, finish_reason: "stop" }],
   usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
 };
@@ -18,15 +18,21 @@ const originalEnv: Record<string, string | undefined> = {};
 
 describe("chat completion feature", () => {
   beforeAll(() => {
-    originalEnv.OPENCODE_API_KEY = Bun.env.OPENCODE_API_KEY;
-    originalEnv.OPENROUTER_API_KEY = Bun.env.OPENROUTER_API_KEY;
-    Bun.env.OPENCODE_API_KEY = "test-opencode-key";
-    Bun.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    originalEnv.PROVIDER_A_API_KEY = Bun.env.PROVIDER_A_API_KEY;
+    originalEnv.PROVIDER_B_API_KEY = Bun.env.PROVIDER_B_API_KEY;
+    originalEnv.PROVIDER_C_API_KEY = Bun.env.PROVIDER_C_API_KEY;
+    originalEnv.PROVIDER_D_API_KEY = Bun.env.PROVIDER_D_API_KEY;
+    Bun.env.PROVIDER_A_API_KEY = "test-provider-a-key";
+    Bun.env.PROVIDER_B_API_KEY = "test-provider-b-key";
+    Bun.env.PROVIDER_C_API_KEY = "test-provider-c-key";
+    Bun.env.PROVIDER_D_API_KEY = "test-provider-d-key";
   });
 
   afterAll(() => {
-    Bun.env.OPENCODE_API_KEY = originalEnv.OPENCODE_API_KEY;
-    Bun.env.OPENROUTER_API_KEY = originalEnv.OPENROUTER_API_KEY;
+    Bun.env.PROVIDER_A_API_KEY = originalEnv.PROVIDER_A_API_KEY;
+    Bun.env.PROVIDER_B_API_KEY = originalEnv.PROVIDER_B_API_KEY;
+    Bun.env.PROVIDER_C_API_KEY = originalEnv.PROVIDER_C_API_KEY;
+    Bun.env.PROVIDER_D_API_KEY = originalEnv.PROVIDER_D_API_KEY;
     resetChatCompletionRoutingState();
   });
 
@@ -96,7 +102,7 @@ describe("chat completion feature", () => {
   test("throws invalid request for multimodal content parts", async () => {
     try {
       await routeChatCompletion({
-        model: "omnigate/deepseek-v4-flash-auto",
+        model: "omnigate/auto-fast",
         messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/image.png" } }] }],
       });
 
@@ -122,7 +128,7 @@ describe("chat completion feature", () => {
   test("returns upstream JSON response through the best provider", async () => {
     const adapter = createMockAdapter({ json: SUCCESS_RESPONSE });
     const result = await routeChatCompletion({
-      model: "omnigate/deepseek-v4-flash-auto",
+      model: "omnigate/auto-fast",
       messages: [{ role: "user", content: "hi" }],
     }, adapter);
 
@@ -138,7 +144,7 @@ describe("chat completion feature", () => {
       ],
     });
     const result = await routeChatCompletion({
-      model: "omnigate/coding-balanced",
+      model: "omnigate/coding-auto",
       messages: [{ role: "user", content: "hi" }],
     }, adapter);
 

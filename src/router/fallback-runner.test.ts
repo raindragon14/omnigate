@@ -14,7 +14,7 @@ const SUCCESS_RESPONSE: OpenAIChatCompletionResponse = {
 };
 
 function makeProvider(id: string, priority: number): ProviderCandidate {
-  return { id, baseUrl: "https://example.com", model: "test-model", family: "deepseek-v4-flash", priority, qualityScore: 85, enabled: true, paidFallback: false, apiKeyEnv: "KEY_" + id.toUpperCase(), context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} };
+  return { id, baseUrl: "https://example.com", model: "test-model", family: "chat-fast", priority, qualityScore: 85, enabled: true, paidFallback: false, apiKeyEnv: "KEY_" + id.toUpperCase(), context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} };
 }
 
 function mockAdapter(overrides: Partial<ProviderAdapter> = {}): ProviderAdapter {

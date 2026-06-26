@@ -35,12 +35,12 @@ bun run dev
 | --- | --- | --- |
 | `OMNIGATE_API_KEY` | Yes | Bearer token clients use to authenticate. Generated automatically by `deploy.sh`. |
 | `PORT` | No | HTTP port. Defaults to `8787`. |
-| Provider API keys | No | Any keys referenced by `api_key_env` in `src/config/provider.registry.yaml` (e.g. `OPENCODE_API_KEY`, `OPENROUTER_API_KEY`). |
+| Provider API keys | No | Any keys referenced by `api_key_env` in `src/config/provider.registry.yaml` (e.g. `PROVIDER_A_API_KEY`). |
 | `OMNIGATE_DB_PATH` | No | SQLite stats path. Defaults to `.data/omnigate.sqlite`. |
 
 At least one provider key is needed for chat requests to work.
 
-To add a new provider, edit `src/config/provider.registry.yaml` and add the matching `api_key_env` value to `.env`.
+To add a new provider, edit `src/config/provider.registry.yaml`: set `base_url`, `model`, `api_key_env`, and `family`, then add the matching `api_key_env` value to `.env`. The registry is loaded fresh on startup.
 
 ## Use with your client
 
@@ -48,7 +48,7 @@ Add to your client config:
 
 ```json
 {
-  "model": "omnigate/deepseek-v4-flash-auto",
+  "model": "omnigate/auto-fast",
   "provider": {
     "omnigate": {
       "name": "OmniGate",
@@ -63,12 +63,14 @@ Add to your client config:
 
 ## Model Aliases
 
+Aliases are defined in `src/config/provider.registry.yaml` and listed at runtime by `GET /v1/models`. The example registry ships these defaults:
+
 | Alias | Description |
 | --- | --- |
-| `omnigate/deepseek-v4-flash-auto` | Best available free DeepSeek provider. |
-| `omnigate/mimo-v2.5-auto` | Best available free MiMo provider. |
-| `omnigate/coding-balanced` | Best free coding provider, speed-first with quality guardrails. |
-| `omnigate/coding-fast` | Fastest free coding provider. |
+| `omnigate/auto-fast` | Best available provider from the fast chat pool. |
+| `omnigate/auto-quality` | Best available provider from the quality chat pool. |
+| `omnigate/coding-auto` | Best available provider for coding tasks. |
+| `omnigate/coding-fast` | Fastest provider for coding tasks. |
 
 ## How Routing Works
 

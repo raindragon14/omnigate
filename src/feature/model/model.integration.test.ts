@@ -7,9 +7,9 @@ import { HTTP_STATUS_OK, HTTP_STATUS_UNAUTHORIZED } from "../../shared/http-stat
 const MODEL_ROUTE_PATH = "/v1/models";
 const EXPECTED_MODEL_LIST_OBJECT = "list";
 const EXPECTED_MODEL_IDS = [
-  "omnigate/deepseek-v4-flash-auto",
-  "omnigate/mimo-v2.5-auto",
-  "omnigate/coding-balanced",
+  "omnigate/auto-fast",
+  "omnigate/auto-quality",
+  "omnigate/coding-auto",
   "omnigate/coding-fast",
 ];
 const TEST_OMNIGATE_API_KEY = "test-omnigate-key";

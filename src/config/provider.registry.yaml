@@ -1,83 +1,94 @@
-# Example provider registry.
-# OmniGate is provider-neutral: edit, add, or remove entries to match whichever
-# services you want to pool. Each provider's `api_key_env` must have a matching
-# value in your `.env` file.
-providers:
-  - id: opencode_zen_deepseek
-    base_url: "https://opencode.ai/zen/v1"
-    model: "deepseek-v4-flash-free"
-    api_key_env: "OPENCODE_API_KEY"
-    family: "deepseek-v4-flash"
-    priority: 100
-    quality_score: 90
-    speed_score: 85
-    enabled: true
-    context: 200000
-    supports_tools: true
-    supports_json: true
-    supports_streaming: true
-    rate_limit:
-      rpm: 10
+# Provider registry template.
+#
+# OmniGate is provider-neutral. Add, remove, or edit entries to pool whichever
+# services you want. Each provider's `api_key_env` must have a matching value
+# in your `.env` file.
+#
+# Fields:
+#   id            unique identifier used internally for routing stats
+#   base_url      OpenAI-compatible chat-completions endpoint
+#   model         the model name the upstream service expects
+#   api_key_env   environment variable holding the upstream API key
+#   family        routing group; aliases map to one or more families
+#   priority      tiebreaker when scores are equal (higher wins)
+#   quality_score 0-100, used by the quality routing mode
+#   speed_score   0-100, used by the speed routing mode
+#   enabled       set to false to exclude without removing the entry
+#   rate_limit    optional {rpm, rph, rpd} for quota-pressure scoring
+#   supports_*    optional feature flags used for request matching
+#
+# Aliases below map public model names to provider families.
 
-  - id: opencode_zen_mimo
-    base_url: "https://opencode.ai/zen/v1"
-    model: "mimo-v2.5-free"
-    api_key_env: "OPENCODE_API_KEY"
-    family: "mimo-v2.5"
-    priority: 98
-    quality_score: 82
+providers:
+  - id: provider_a
+    base_url: "https://api.provider-a.example/v1"
+    model: "provider-a-model"
+    api_key_env: "PROVIDER_A_API_KEY"
+    family: "chat-fast"
+    priority: 90
+    quality_score: 80
     speed_score: 90
     enabled: true
-    context: 200000
     supports_tools: true
     supports_json: true
     supports_streaming: true
     rate_limit:
-      rpm: 10
+      rpm: 20
 
-  - id: openrouter_nemotron_3_nano_omni_free
-    base_url: "https://openrouter.ai/api/v1"
-    model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-    api_key_env: "OPENROUTER_API_KEY"
-    family: "nemotron-3-nano-omni"
+  - id: provider_b
+    base_url: "https://api.provider-b.example/v1"
+    model: "provider-b-model"
+    api_key_env: "PROVIDER_B_API_KEY"
+    family: "chat-quality"
+    priority: 90
+    quality_score: 92
+    speed_score: 80
+    enabled: true
+    supports_tools: true
+    supports_json: true
+    supports_streaming: true
+    rate_limit:
+      rpm: 20
+
+  - id: provider_c
+    base_url: "https://api.provider-c.example/v1"
+    model: "provider-c-model"
+    api_key_env: "PROVIDER_C_API_KEY"
+    family: "coding-fast"
+    priority: 90
+    quality_score: 85
+    speed_score: 90
+    enabled: true
+    supports_tools: true
+    supports_json: true
+    supports_streaming: true
+    rate_limit:
+      rpm: 20
+
+  - id: provider_d
+    base_url: "https://api.provider-d.example/v1"
+    model: "provider-d-model"
+    api_key_env: "PROVIDER_D_API_KEY"
+    family: "chat-balanced"
     priority: 88
-    quality_score: 80
-    speed_score: 82
+    quality_score: 88
+    speed_score: 85
     enabled: true
-    context: 256000
     supports_tools: true
-    supports_json: false
+    supports_json: true
     supports_streaming: true
     rate_limit:
       rpm: 20
-      rpd: 50
-
-  - id: openrouter_poolside_laguna_xs2_free
-    base_url: "https://openrouter.ai/api/v1"
-    model: "poolside/laguna-xs.2:free"
-    api_key_env: "OPENROUTER_API_KEY"
-    family: "laguna-xs.2"
-    priority: 86
-    quality_score: 76
-    speed_score: 92
-    enabled: true
-    context: 262144
-    supports_tools: true
-    supports_json: false
-    supports_streaming: true
-    rate_limit:
-      rpm: 20
-      rpd: 50
 
 aliases:
-  omnigate/deepseek-v4-flash-auto:
-    families: ["deepseek-v4-flash"]
-  omnigate/mimo-v2.5-auto:
-    families: ["mimo-v2.5"]
-  omnigate/coding-balanced:
-    families: ["deepseek-v4-flash", "mimo-v2.5", "nemotron-3-nano-omni"]
+  omnigate/auto-fast:
+    families: ["chat-fast", "chat-balanced"]
+  omnigate/auto-quality:
+    families: ["chat-quality", "chat-balanced"]
+  omnigate/coding-auto:
+    families: ["coding-fast", "chat-quality"]
   omnigate/coding-fast:
-    families: ["mimo-v2.5", "deepseek-v4-flash", "laguna-xs.2"]
+    families: ["coding-fast"]
     weights:
       speed: 5
       quality: 0.5

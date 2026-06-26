@@ -5,11 +5,11 @@ import { loadProviderRegistry, parseProviderRegistry, resetProviderRegistry, res
 const VALID_REGISTRY = {
   providers: [
     {
-      id: "provider_a_deepseek",
+      id: "provider_a",
       base_url: "https://api.provider-a.example/v1",
-      model: "provider-a/deepseek-v4-flash",
+      model: "provider-a-model",
       api_key_env: "PROVIDER_A_API_KEY",
-      family: "deepseek-v4-flash",
+      family: "chat-fast",
       priority: 100,
       quality_score: 90,
       speed_score: 85,
@@ -21,7 +21,7 @@ const VALID_REGISTRY = {
     },
   ],
   aliases: {
-    "omnigate/deepseek-v4-flash-auto": { families: ["deepseek-v4-flash"] },
+    "omnigate/auto-fast": { families: ["chat-fast"] },
   },
 };
 
@@ -61,7 +61,7 @@ describe("provider loader", () => {
   });
 
   test("rejects empty alias families", () => {
-    const aliases = { "omnigate/deepseek-v4-flash-auto": { families: [] } };
+    const aliases = { "omnigate/auto-fast": { families: [] } };
 
     expect(() => parseProviderRegistry({ ...VALID_REGISTRY, aliases })).toThrow(REGISTRY_ERROR_MESSAGE);
   });

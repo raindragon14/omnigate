@@ -5,8 +5,8 @@ import { createSqliteDatabase, migrateSqliteDatabase } from "./sqlite.database";
 
 const MEMORY_DATABASE_PATH = ":memory:";
 const NOW_MS = Date.UTC(2026, 0, 2, 3, 4, 5);
-const PROVIDER_ID = "provider_a_deepseek";
-const MODEL_FAMILY = "deepseek-v4-flash";
+const PROVIDER_ID = "provider_a";
+const MODEL_FAMILY = "chat-fast";
 
 /** Unit tests for SQLite-backed provider stats repository. */
 describe("provider stats repository", () => {
