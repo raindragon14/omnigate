@@ -9,6 +9,21 @@
 
 ---
 
+## Table of Contents
+
+- [Why This Exists](#why-this-exists)
+- [Quick Start](#quick-start)
+- [How It Works](#how-it-works)
+- [Usage](#usage-openai-sdk)
+- [Configuration](#configuration)
+- [Technical Decisions](#technical-decisions-and-why)
+- [What's Not Done Yet](#whats-not-done-yet)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
 ## Why This Exists
 
 I got tired of juggling API keys. Groq for speed, Together for quality, Fireworks for coding — each with different rate limits, different model names, different failure modes. I'd switch manually when one hit a 429, which meant I was always reacting, never ahead.
@@ -48,13 +63,31 @@ curl http://localhost:8787/health
 
 ---
 
-## How It Works (The Short Version)
+## Architecture
 
+```mermaid
+flowchart TD
+    Client[Client<br/>OpenAI SDK] -->|POST /v1/chat/completions| Gateway[Hono Gateway<br/>:8787]
+    Gateway --> Auth{API Key Auth<br/>timingSafeEqual}
+    Auth -->|valid| Router[Provider Router]
+    Router --> Selector[Provider Selector<br/>family + feature filter]
+    Selector --> Scorer[Provider Scorer<br/>weighted signals]
+    Scorer -->|read signals| SQLite[(SQLite<br/>routing stats)]
+    Scorer -->|ranked list| Fallback[Fallback Runner]
+    Fallback -->|try 1| ProviderA[Provider A<br/>chat-fast]
+    Fallback -.->|on 429/5xx/timeout| ProviderB[Provider B<br/>chat-quality]
+    Fallback -.->|on 429/5xx/timeout| ProviderC[Provider C<br/>coding-fast]
+    ProviderA -->|SSE stream| Client
+    ProviderB -->|SSE stream| Client
+    ProviderC -->|SSE stream| Client
+    SQLite -->|observe & persist| Scorer
 ```
-Request → Auth → Match alias → Filter providers by family/features/cooldown
-  → Score by weighted signals (latency, throughput, quality, reliability, quota)
-  → Try top provider → Fallback on 429/5xx/timeout → Return first success
-```
+
+**Request flow**: Authenticate → Match alias to families → Filter by features/API key/cooldown → Score by weighted signals → Try top provider → Fallback on retryable errors → Return first success.
+
+---
+
+## How It Works
 
 **Signals we track per provider:**
 
@@ -211,6 +244,12 @@ bun x prettier --write .
 ```
 
 CI runs `typecheck` → `test` on every push.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
