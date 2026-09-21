@@ -1,129 +1,223 @@
 # OmniGate
 
-One local OpenAI-compatible endpoint that pools free LLM providers behind a single base URL with automatic fallback and intelligent routing.
-
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Runtime](https://img.shields.io/badge/runtime-Bun-ff69b4?style=flat-square&logo=bun)](https://bun.sh)
-[![CI](https://img.shields.io/github/actions/workflow/status/raindragon14/omnigate/ci.yml?branch=master&style=flat-square&logo=github)](https://github.com/raindragon14/omnigate/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/raindragon14/omnigate/ci.yml?branch=main&style=flat-square&logo=github)](https://github.com/raindragon14/omnigate/actions)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker)](https://github.com/raindragon14/omnigate/pkgs/container/omnigate)
 
-## Why
+**One local OpenAI-compatible endpoint that pools free LLM providers behind a single base URL with automatic fallback and intelligent routing.**
 
-Switching between free LLM providers manually is tedious. OmniGate gives you one stable `baseURL` and one API key — it picks the fastest available provider for each request, falls back automatically on rate limits or errors, and tracks performance in SQLite so routing improves over time.
+---
+
+## Why This Exists
+
+I got tired of juggling API keys. Groq for speed, Together for quality, Fireworks for coding — each with different rate limits, different model names, different failure modes. I'd switch manually when one hit a 429, which meant I was always reacting, never ahead.
+
+The insight: **treat providers as a pool, not a pick**. Every request generates signal — latency, throughput, error rate, quota burn. Store that in SQLite. Next request, route to the provider that's _actually_ performing best _right now_ for _that kind of request_. The system gets smarter the more you use it.
+
+Result: one `baseURL`, one API key. It just works, and it gets faster over time.
+
+---
 
 ## Quick Start
 
-**Docker (recommended):**
+### Docker (easiest)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/raindragon14/omnigate/master/deploy.sh | bash
+curl -fsSL https://raw.githubusercontent.com/raindragon14/omnigate/main/deploy.sh | bash
 ```
 
-**Local development:**
+Generates your `OMNIGATE_API_KEY`, sets up a systemd service, runs on `127.0.0.1:8787`.
+
+### Local
 
 ```bash
 git clone https://github.com/raindragon14/omnigate && cd omnigate
 cp .env.example .env
-# Edit .env — set OMNIGATE_API_KEY and at least one provider key
+# Add OMNIGATE_API_KEY + at least one provider key (PROVIDER_A_API_KEY, etc.)
 bun install
 bun run dev
 ```
 
+Test it:
+
+```bash
+curl http://localhost:8787/health
+# {"status":"ok","service":"omnigate"}
+```
+
+---
+
+## How It Works (The Short Version)
+
+```
+Request → Auth → Match alias → Filter providers by family/features/cooldown
+  → Score by weighted signals (latency, throughput, quality, reliability, quota)
+  → Try top provider → Fallback on 429/5xx/timeout → Return first success
+```
+
+**Signals we track per provider:**
+
+- **Throughput** — completion tokens / total latency
+- **Latency** — end-to-end (JSON) or TTFT (streaming)
+- **Quality** — static score from registry (0–100)
+- **Reliability** — 1 − (failures + rate_limits) / total_requests
+- **Quota pressure** — daily_requests / rpd_limit
+- **Feature match** — tools, JSON mode, streaming (hard filter)
+
+**Routing modes** (pass `mode` in request body):
+
+| Mode       | Bias                                        |
+| ---------- | ------------------------------------------- |
+| `balanced` | Equal weights (default)                     |
+| `speed`    | 3× latency/throughput, 0.5× quality         |
+| `quality`  | 3× quality, 0.5× speed                      |
+| `survival` | 3× reliability/quota, avoids paid fallbacks |
+
+Alias-level overrides live in `provider.registry.yaml` — see `omnigate/coding-fast` for an example.
+
+**Fallback triggers:** 429, 5xx, timeout, network error, malformed response.  
+**Stops on:** other 4xx (client errors).  
+**Cooldown:** exponential backoff, persisted in SQLite.
+
+---
+
+## Usage (OpenAI SDK)
+
+```typescript
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  baseURL: "http://localhost:8787/v1",
+  apiKey: process.env.OMNIGATE_API_KEY,
+});
+
+// Basic
+const completion = await openai.chat.completions.create({
+  model: "omnigate/auto-fast",
+  messages: [{ role: "user", content: "Explain quantum entanglement" }],
+});
+
+// Streaming
+for await (const chunk of await openai.chat.completions.create({
+  model: "omnigate/auto-quality",
+  messages: [{ role: "user", content: "Write a short story" }],
+  stream: true,
+})) {
+  process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
+}
+
+// Mode override
+await openai.chat.completions.create({
+  model: "omnigate/coding-fast",
+  messages: [{ role: "user", content: "Refactor this function" }],
+  mode: "speed",
+});
+```
+
+---
+
 ## Configuration
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `OMNIGATE_API_KEY` | Yes | Bearer token clients use to authenticate. Generated automatically by `deploy.sh`. |
-| `PORT` | No | HTTP port. Defaults to `8787`. |
-| Provider API keys | No | Any keys referenced by `api_key_env` in `src/config/provider.registry.yaml` (e.g. `PROVIDER_A_API_KEY`). |
-| `OMNIGATE_DB_PATH` | No | SQLite stats path. Defaults to `.data/omnigate.sqlite`. |
+### Environment Variables
 
-At least one provider key is needed for chat requests to work.
+| Variable             | Required     | Default                 | Notes                           |
+| -------------------- | ------------ | ----------------------- | ------------------------------- |
+| `OMNIGATE_API_KEY`   | Yes          | —                       | Client auth token               |
+| `PORT`               | No           | `8787`                  | HTTP port                       |
+| `OMNIGATE_DB_PATH`   | No           | `.data/omnigate.sqlite` | SQLite file                     |
+| `PROVIDER_*_API_KEY` | Per provider | —                       | Match `api_key_env` in registry |
 
-To add a new provider, edit `src/config/provider.registry.yaml`: set `base_url`, `model`, `api_key_env`, and `family`, then add the matching `api_key_env` value to `.env`. The registry is loaded fresh on startup.
+### Provider Registry
 
-## Use with your client
+Edit `src/config/provider.registry.yaml`. Example entry:
 
-Add to your client config:
-
-```json
-{
-  "model": "omnigate/auto-fast",
-  "provider": {
-    "omnigate": {
-      "name": "OmniGate",
-      "options": {
-        "baseURL": "http://localhost:8787/v1",
-        "apiKey": "YOUR_OMNIGATE_API_KEY"
-      }
-    }
-  }
-}
+```yaml
+providers:
+  - id: groq_llama3
+    base_url: "https://api.groq.com/openai/v1"
+    model: "llama-3.3-70b-versatile"
+    api_key_env: "GROQ_API_KEY"
+    family: "chat-fast"
+    priority: 90
+    quality_score: 85
+    speed_score: 95
+    enabled: true
+    supports_tools: true
+    supports_json: true
+    supports_streaming: true
+    rate_limit:
+      rpm: 30
 ```
 
-## Model Aliases
+**Aliases** (what clients actually call):
 
-Aliases are defined in `src/config/provider.registry.yaml` and listed at runtime by `GET /v1/models`. The example registry ships these defaults:
-
-| Alias | Description |
-| --- | --- |
-| `omnigate/auto-fast` | Best available provider from the fast chat pool. |
-| `omnigate/auto-quality` | Best available provider from the quality chat pool. |
-| `omnigate/coding-auto` | Best available provider for coding tasks. |
-| `omnigate/coding-fast` | Fastest provider for coding tasks. |
-
-## How Routing Works
-
-Each request is matched to an alias, filtered to eligible providers (correct family, API key present, not in cooldown, supports required features), then scored and ranked by objective signals persisted in SQLite:
-
-| Signal | What it measures | Source |
-| --- | --- | --- |
-| **Throughput** | Output tokens per second (`completion_tokens / total_latency`). | Observed per successful non-streaming request. |
-| **Latency** | End-to-end response time for JSON requests; time-to-first-token (TTFT) for streaming requests. | Observed per request. |
-| **Quality** | Static quality score for the provider/model. | `quality_score` in `provider.registry.yaml`. |
-| **Reliability** | Failure and rate-limit ratios. | Observed over the current UTC day. |
-| **Quota pressure** | Daily request count vs. configured `rpd` limit. | `rate_limit` in `provider.registry.yaml` + observed requests. |
-| **Feature match** | Whether the provider supports requested tools, JSON mode, or streaming. | `provider.registry.yaml`. |
-
-Routing modes (`balanced`, `speed`, `quality`, `survival`) adjust the weights of these signals. Pass `mode` in the chat request body to override the default:
-
-```json
-{
-  "model": "omnigate/coding-fast",
-  "messages": [{ "role": "user", "content": "hi" }],
-  "mode": "speed"
-}
+```yaml
+aliases:
+  omnigate/auto-fast:
+    families: ["chat-fast", "chat-balanced"]
+  omnigate/coding-fast:
+    families: ["coding-fast"]
+    weights:
+      speed: 5
+      quality: 0.5
+    tiebreak: speed
 ```
 
-Alias-level `weights` and `tiebreak` in `provider.registry.yaml` can override mode-based weights for specific models. Set `allow_paid: true` on an alias to include paid-fallback providers in its pool.
+Add a provider → add its `api_key_env` to `.env` → restart. That's it.
 
-The highest-scoring provider is tried first. On `429`, `5xx`, timeout, network error, or malformed response, OmniGate falls back to the next provider automatically. Client errors (4xx other than 429/401/403) stop fallback and are returned to the caller.
+---
 
-## API
+## Technical Decisions (And Why)
 
-| Endpoint | Auth | Description |
-| --- | --- | --- |
-| `GET /health` | No | Liveness check. Returns `{"status":"ok","service":"omnigate"}`. |
-| `GET /v1/models` | Yes | Lists available model aliases. |
-| `POST /v1/chat/completions` | Yes | OpenAI-compatible chat completions with automatic provider routing and streaming. |
+**Bun over Node/Deno** — Native SQLite, no transpile step, built-in test runner, fast cold starts. The `bun:sqlite` API is clean and fast enough for our write-heavy stats workload.
 
-## Security
+**Hono** — Zero deps, ~14KB, edge-ready, TypeScript inference that actually works. Express would've been fine but heavier; Fastify adds complexity we don't need.
 
-- **Localhost only** — Docker binds to `127.0.0.1:8787`. Not exposed to the network.
-- **API key auth** — All `/v1/*` routes require a Bearer token. Comparison uses constant-time `timingSafeEqual`.
-- **Keys server-side** — Provider API keys live in environment variables, never sent to clients.
-- **No data persistence** — Prompts and completions stay in memory. SQLite stores routing stats only.
-- **Streaming passthrough** — SSE bytes flow through without buffering or storage.
+**SQLite (`bun:sqlite`)** — Not Postgres, not Redis. Single file, survives restarts, zero config, handles our write volume easily. We're not clustering yet.
+
+**YAML registry** — Not JSON, not TypeScript config. Human-editable, diffs cleanly in PRs, no recompile needed. Hot-reload would be nice but explicit restart is safer for production.
+
+**OpenAI-compatible API** — Not a custom schema. Drop-in for any OpenAI SDK client. Zero learning curve. The `mode` parameter is our only extension.
+
+**Constant-time auth** — `timingSafeEqual` on the Bearer token. Paranoid? Maybe. But it's three lines of code and eliminates a timing attack vector.
+
+**Streaming passthrough** — No buffering, no transformation. SSE bytes flow straight through. Memory stays flat regardless of response size.
+
+**No registry hot-reload** — File watchers add complexity and failure modes. Restart is explicit, visible, and safe. We'll add it when someone actually needs it.
+
+---
+
+## What's Not Done Yet
+
+- Multi-node (Redis-backed stats) — single instance only for now
+- Cost tracking per provider/request
+- Prometheus `/metrics` endpoint
+- Admin dashboard
+- Request/response logging (opt-in)
+
+These are intentional omissions, not oversights. The core routing loop is solid. Everything else waits for real demand.
+
+---
 
 ## Development
 
 ```bash
-bun install            # Install dependencies
-bun run dev            # Start with watch mode
-bun test               # Run all tests
-bun run typecheck      # TypeScript check
+bun install
+bun run dev          # Watch mode
+bun test             # Unit + integration (132 tests)
+bun run typecheck    # Strict TS
+bun x prettier --write .
 ```
+
+CI runs `typecheck` → `test` on every push.
+
+---
 
 ## License
 
-[MIT](LICENSE)
+MIT. See `LICENSE`.
+
+---
+
+Built by [raindragon14](https://github.com/raindragon14). Issues and PRs welcome.
