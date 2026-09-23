@@ -19,6 +19,7 @@ const MIN_REQUESTS_FOR_FULL_CONFIDENCE = 5;
 
 const FEATURE_TOOL_MATCH_BONUS = 20;
 const FEATURE_JSON_MATCH_BONUS = 15;
+const FEATURE_REASONING_MATCH_BONUS = 15;
 const FEATURE_STREAMING_MATCH_BONUS = 10;
 
 const FAILURE_PENALTY_WEIGHT = 100;
@@ -189,6 +190,10 @@ function calculateFeatureBonus(request: RouterRequest, provider: ProviderCandida
 
   if (request.responseFormat !== undefined && provider.supportsJson) {
     bonus += FEATURE_JSON_MATCH_BONUS;
+  }
+
+  if (request.reasoningEffort !== undefined && provider.supportsReasoning) {
+    bonus += FEATURE_REASONING_MATCH_BONUS;
   }
 
   return request.stream && provider.supportsStreaming ? bonus + FEATURE_STREAMING_MATCH_BONUS : bonus;

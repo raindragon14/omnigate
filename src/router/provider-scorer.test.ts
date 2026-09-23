@@ -22,6 +22,7 @@ function makeProvider(overrides: Partial<ProviderCandidate> = {}): ProviderCandi
     supportsTools: true,
     supportsJson: true,
     supportsStreaming: true,
+    supportsReasoning: true,
     rateLimit: {},
     ...overrides,
   };
@@ -118,6 +119,13 @@ describe("provider scoring", () => {
       const withoutTools = scoreProvider({ request: makeRequest({ tools: [{ type: "function" }] }), provider: makeProvider({ supportsTools: false }) });
 
       expect(withTools.score).toBeGreaterThan(withoutTools.score);
+    });
+
+    test("rewards reasoning support when request has reasoning_effort", () => {
+      const withReasoning = scoreProvider({ request: makeRequest({ reasoningEffort: "high" }), provider: makeProvider({ supportsReasoning: true }) });
+      const withoutReasoning = scoreProvider({ request: makeRequest({ reasoningEffort: "high" }), provider: makeProvider({ supportsReasoning: false }) });
+
+      expect(withReasoning.score).toBeGreaterThan(withoutReasoning.score);
     });
   });
 
