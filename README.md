@@ -96,7 +96,7 @@ flowchart TD
 - **Quality** — static score from registry (0–100)
 - **Reliability** — 1 − (failures + rate_limits) / total_requests
 - **Quota pressure** — daily_requests / rpd_limit
-- **Feature match** — tools, JSON mode, streaming (hard filter)
+- **Feature match** — tools, JSON mode, streaming, reasoning effort (hard filter)
 
 **Routing modes** (pass `mode` in request body):
 
@@ -148,6 +148,13 @@ await openai.chat.completions.create({
 });
 ```
 
+**Extra request fields:**
+
+- `reasoning_effort` (`minimal` | `low` | `medium` | `high`) — forwarded upstream only to providers with `supports_reasoning: true`; providers without the flag are excluded from routing for that request (hard filter, like tools).
+- `stream_options: { include_usage: true }` — forwarded on streaming requests so upstream returns the usage chunk.
+- `role: "developer"` messages are accepted and normalized to `system` before routing.
+- `max_tokens` is sent using each provider's `max_tokens_field` (`max_tokens` by default, or `max_completion_tokens` when configured in the registry).
+
 ---
 
 ## Configuration
@@ -179,6 +186,8 @@ providers:
     supports_tools: true
     supports_json: true
     supports_streaming: true
+    supports_reasoning: true
+    # max_tokens_field: max_completion_tokens   # optional upstream body key
     rate_limit:
       rpm: 30
 ```

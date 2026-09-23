@@ -25,11 +25,12 @@ OmniGate is a single-node, OpenAI-compatible proxy that routes chat completion r
 2. Auth middleware validates Bearer token (timingSafeEqual)
 3. Request normalizer:
    - Validates via Zod schema
-   - Extracts model alias, mode, stream flag
+   - Extracts model alias, mode, stream flag, reasoning_effort, stream_options
+   - Normalizes `developer` roles to `system`
    - Sets defaults (mode: "balanced")
 4. Provider Selector:
    - Resolves alias → families from registry
-   - Filters providers by: family, enabled, api_key present, not in cooldown, supports required features
+   - Filters providers by: family, enabled, api_key present, not in cooldown, supports required features (tools, JSON, streaming, reasoning)
 5. Provider Scorer:
    - Reads per-provider signals from SQLite (daily_stats)
    - Computes weighted score per routing mode
