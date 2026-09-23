@@ -43,6 +43,8 @@ const providerSchema = z.object({
   supports_tools: z.boolean().optional(),
   supports_json: z.boolean().optional(),
   supports_streaming: z.boolean().optional(),
+  supports_reasoning: z.boolean().optional(),
+  max_tokens_field: z.enum(["max_tokens", "max_completion_tokens"]).optional(),
   rate_limit: rateLimitSchema.optional(),
 });
 
@@ -139,6 +141,8 @@ function toProviderCandidate(raw: RawProvider): ProviderCandidate {
     supportsTools: raw.supports_tools ?? false,
     supportsJson: raw.supports_json ?? false,
     supportsStreaming: raw.supports_streaming ?? true,
+    supportsReasoning: raw.supports_reasoning ?? false,
+    maxTokensField: raw.max_tokens_field,
     rateLimit: toRateLimit(raw.rate_limit),
   };
 }

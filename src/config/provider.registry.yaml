@@ -1,8 +1,6 @@
-# Provider registry template.
+# Provider registry — live deployment (phiconsulting.biz.id).
 #
-# OmniGate is provider-neutral. Add, remove, or edit entries to pool whichever
-# services you want. Each provider's `api_key_env` must have a matching value
-# in your `.env` file.
+# Each provider's `api_key_env` must have a matching value in `.env`.
 #
 # Fields:
 #   id            unique identifier used internally for routing stats
@@ -16,69 +14,53 @@
 #   enabled       set to false to exclude without removing the entry
 #   rate_limit    optional {rpm, rph, rpd} for quota-pressure scoring
 #   supports_*    optional feature flags used for request matching
-#
-# Aliases below map public model names to provider families.
+#                 (supports_reasoning gates reasoning_effort requests)
+#   max_tokens_field  optional max_tokens | max_completion_tokens body key
 
 providers:
-  - id: provider_a
-    base_url: "https://api.provider-a.example/v1"
-    model: "provider-a-model"
-    api_key_env: "PROVIDER_A_API_KEY"
+  - id: commandcode_flash
+    base_url: "https://api.commandcode.ai/provider/v1"
+    model: "xiaomi/mimo-v2.6-flash"
+    api_key_env: "COMMANDCODE_API_KEY"
     family: "chat-fast"
-    priority: 90
-    quality_score: 80
-    speed_score: 90
-    enabled: true
-    supports_tools: true
-    supports_json: true
-    supports_streaming: true
-    rate_limit:
-      rpm: 20
-
-  - id: provider_b
-    base_url: "https://api.provider-b.example/v1"
-    model: "provider-b-model"
-    api_key_env: "PROVIDER_B_API_KEY"
-    family: "chat-quality"
-    priority: 90
-    quality_score: 92
-    speed_score: 80
-    enabled: true
-    supports_tools: true
-    supports_json: true
-    supports_streaming: true
-    rate_limit:
-      rpm: 20
-
-  - id: provider_c
-    base_url: "https://api.provider-c.example/v1"
-    model: "provider-c-model"
-    api_key_env: "PROVIDER_C_API_KEY"
-    family: "coding-fast"
-    priority: 90
+    priority: 95
     quality_score: 85
-    speed_score: 90
+    speed_score: 92
     enabled: true
     supports_tools: true
     supports_json: true
     supports_streaming: true
-    rate_limit:
-      rpm: 20
+    supports_reasoning: true
 
-  - id: provider_d
-    base_url: "https://api.provider-d.example/v1"
-    model: "provider-d-model"
-    api_key_env: "PROVIDER_D_API_KEY"
-    family: "chat-balanced"
-    priority: 88
-    quality_score: 88
-    speed_score: 85
+  - id: commandcode_pro
+    base_url: "https://api.commandcode.ai/provider/v1"
+    model: "xiaomi/mimo-v2.6-pro"
+    api_key_env: "COMMANDCODE_API_KEY"
+    family: "chat-quality"
+    priority: 92
+    quality_score: 93
+    speed_score: 70
     enabled: true
     supports_tools: true
     supports_json: true
     supports_streaming: true
-    rate_limit:
-      rpm: 20
+    supports_reasoning: true
+
+  # Public free-tier upstream (anonymous tier, no real key required).
+  # Used as the backup/fallback path — genuinely flaky by design, which is
+  # exactly what the fallback loop is for.
+  - id: pollinations_public
+    base_url: "https://text.pollinations.ai/openai"
+    model: "openai"
+    api_key_env: "POLLINATIONS_API_KEY"
+    family: "chat-balanced"
+    priority: 75
+    quality_score: 75
+    speed_score: 60
+    enabled: true
+    supports_tools: false
+    supports_json: true
+    supports_streaming: true
 
 aliases:
   omnigate/auto-fast:
@@ -86,9 +68,9 @@ aliases:
   omnigate/auto-quality:
     families: ["chat-quality", "chat-balanced"]
   omnigate/coding-auto:
-    families: ["coding-fast", "chat-quality"]
+    families: ["chat-quality", "chat-fast"]
   omnigate/coding-fast:
-    families: ["coding-fast"]
+    families: ["chat-fast"]
     weights:
       speed: 5
       quality: 0.5

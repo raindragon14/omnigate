@@ -43,7 +43,7 @@ function buildProviderRequest(request: RouterRequest, provider: ProviderCandidat
   const body: Record<string, unknown> = {
     model: provider.model,
     messages: request.messages,
-    max_tokens: request.maxTokens,
+    [provider.maxTokensField ?? "max_tokens"]: request.maxTokens,
     temperature: request.temperature,
     top_p: request.topP,
     stream: request.stream,
@@ -59,6 +59,14 @@ function buildProviderRequest(request: RouterRequest, provider: ProviderCandidat
 
   if (request.responseFormat !== undefined) {
     body.response_format = request.responseFormat;
+  }
+
+  if (request.reasoningEffort !== undefined) {
+    body.reasoning_effort = request.reasoningEffort;
+  }
+
+  if (request.streamOptions !== undefined && request.stream) {
+    body.stream_options = { include_usage: request.streamOptions.includeUsage ?? true };
   }
 
   return {

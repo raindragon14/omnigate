@@ -18,6 +18,7 @@ const PROVIDER: ProviderCandidate = {
   supportsTools: true,
   supportsJson: true,
   supportsStreaming: true,
+  supportsReasoning: true,
   rateLimit: {},
 };
 
@@ -40,6 +41,59 @@ describe("openai-compatible adapter", () => {
     expect(providerRequest.body.tools).toEqual([{ type: "function" }]);
     expect(providerRequest.body.tool_choice).toBe("auto");
     expect(providerRequest.body.response_format).toEqual({ type: "json_object" });
+  });
+
+  test("forwards reasoning_effort and stream options for streaming requests", () => {
+    const adapter = createOpenAiCompatibleAdapter();
+    const request: RouterRequest = {
+      model: "omnigate/auto-fast",
+      messages: [{ role: "user", content: "think" }],
+      stream: true,
+      mode: "quality",
+      reasoningEffort: "high",
+      streamOptions: { includeUsage: true },
+    };
+
+    const providerRequest = adapter.transformRequest(request, PROVIDER, "sk-test");
+
+    expect(providerRequest.body.reasoning_effort).toBe("high");
+    expect(providerRequest.body.stream_options).toEqual({ include_usage: true });
+  });
+
+  test("omits reasoning_effort when absent and stream_options when non-streaming", () => {
+    const adapter = createOpenAiCompatibleAdapter();
+    const request: RouterRequest = {
+      model: "omnigate/auto-fast",
+      messages: [{ role: "user", content: "hi" }],
+      stream: false,
+      mode: "balanced",
+      streamOptions: { includeUsage: true },
+    };
+
+    const providerRequest = adapter.transformRequest(request, PROVIDER, "sk-test");
+
+    expect(providerRequest.body.reasoning_effort).toBeUndefined();
+    expect(providerRequest.body.stream_options).toBeUndefined();
+  });
+
+  test("uses the provider max_tokens_field name", () => {
+    const adapter = createOpenAiCompatibleAdapter();
+    const request: RouterRequest = {
+      model: "omnigate/auto-fast",
+      messages: [{ role: "user", content: "hi" }],
+      maxTokens: 16384,
+      stream: false,
+      mode: "balanced",
+    };
+
+    const providerRequest = adapter.transformRequest(
+      request,
+      { ...PROVIDER, maxTokensField: "max_completion_tokens" },
+      "sk-test",
+    );
+
+    expect(providerRequest.body.max_completion_tokens).toBe(16384);
+    expect(providerRequest.body.max_tokens).toBeUndefined();
   });
 
   test("returns unconsumed streaming response", async () => {
