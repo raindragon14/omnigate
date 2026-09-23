@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 
 import type { ProviderAdapter } from "../../provider/provider-adapter";
 import type { OpenAIChatCompletionResponse } from "../../shared/signatures";
+import { loadProviderRegistry } from "../../config/provider-loader";
 import { normalizeRequest } from "../../router/request-normalizer";
 import { resetChatCompletionRoutingState, routeChatCompletion, RoutingError } from "./chat-completion.service";
 
@@ -14,25 +15,25 @@ const SUCCESS_RESPONSE: OpenAIChatCompletionResponse = {
   usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
 };
 
+const REGISTRY_API_KEY_ENV_NAMES = [...new Set(loadProviderRegistry().providers.map((p) => p.apiKeyEnv))];
 const originalEnv: Record<string, string | undefined> = {};
 
 describe("chat completion feature", () => {
   beforeAll(() => {
-    originalEnv.PROVIDER_A_API_KEY = Bun.env.PROVIDER_A_API_KEY;
-    originalEnv.PROVIDER_B_API_KEY = Bun.env.PROVIDER_B_API_KEY;
-    originalEnv.PROVIDER_C_API_KEY = Bun.env.PROVIDER_C_API_KEY;
-    originalEnv.PROVIDER_D_API_KEY = Bun.env.PROVIDER_D_API_KEY;
-    Bun.env.PROVIDER_A_API_KEY = "test-provider-a-key";
-    Bun.env.PROVIDER_B_API_KEY = "test-provider-b-key";
-    Bun.env.PROVIDER_C_API_KEY = "test-provider-c-key";
-    Bun.env.PROVIDER_D_API_KEY = "test-provider-d-key";
+    for (const name of REGISTRY_API_KEY_ENV_NAMES) {
+      originalEnv[name] = Bun.env[name];
+      Bun.env[name] = `test-${name.toLowerCase()}-key`;
+    }
   });
 
   afterAll(() => {
-    Bun.env.PROVIDER_A_API_KEY = originalEnv.PROVIDER_A_API_KEY;
-    Bun.env.PROVIDER_B_API_KEY = originalEnv.PROVIDER_B_API_KEY;
-    Bun.env.PROVIDER_C_API_KEY = originalEnv.PROVIDER_C_API_KEY;
-    Bun.env.PROVIDER_D_API_KEY = originalEnv.PROVIDER_D_API_KEY;
+    for (const name of REGISTRY_API_KEY_ENV_NAMES) {
+      if (originalEnv[name] === undefined) {
+        delete Bun.env[name];
+      } else {
+        Bun.env[name] = originalEnv[name];
+      }
+    }
     resetChatCompletionRoutingState();
   });
 
