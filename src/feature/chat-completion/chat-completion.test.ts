@@ -99,6 +99,26 @@ describe("chat completion feature", () => {
     expect(routerRequest.responseFormat).toEqual({ type: "json_object" });
   });
 
+  test("forwards reasoning_effort through routing to the adapter", async () => {
+    let capturedReasoningEffort: string | undefined;
+    const baseAdapter = createMockAdapter({ json: SUCCESS_RESPONSE });
+    const capturingAdapter: ProviderAdapter = {
+      ...baseAdapter,
+      transformRequest: (request, provider, apiKey) => {
+        capturedReasoningEffort = request.reasoningEffort;
+        return baseAdapter.transformRequest(request, provider, apiKey);
+      },
+    };
+
+    await routeChatCompletion({
+      model: "omnigate/auto-fast",
+      messages: [{ role: "user", content: "hi" }],
+      reasoning_effort: "high",
+    }, capturingAdapter);
+
+    expect(capturedReasoningEffort).toBe("high");
+  });
+
   test("throws invalid request for multimodal content parts", async () => {
     try {
       await routeChatCompletion({

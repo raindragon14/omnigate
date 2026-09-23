@@ -67,6 +67,41 @@ describe("chat completion integration", () => {
     expect(response.status).toBe(HTTP_STATUS_BAD_REQUEST);
   });
 
+  /** Should accept the developer role (normalised to system before routing). */
+  test("accepts developer role", async () => {
+    const response = await withClearedProviderApiKeys(async () => {
+      return app.request(CHAT_COMPLETION_PATH, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: JSON.stringify({
+          model: "omnigate/auto-fast",
+          messages: [{ role: "developer", content: "hi" }],
+        }),
+      });
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_BAD_REQUEST);
+
+    const body = await response.json();
+
+    expect(body.error.message).toContain("No available provider");
+  });
+
+  /** Should return 400 when reasoning_effort is not a known enum value. */
+  test("rejects invalid reasoning_effort", async () => {
+    const response = await app.request(CHAT_COMPLETION_PATH, {
+      method: "POST",
+      headers: AUTH_HEADERS,
+      body: JSON.stringify({
+        model: "omnigate/auto-fast",
+        messages: [{ role: "user", content: "hi" }],
+        reasoning_effort: "extreme",
+      }),
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_BAD_REQUEST);
+  });
+
   /** Should return 400 when no provider has a configured API key for the requested model. */
   test("returns client error for valid request when no provider has API keys", async () => {
     const response = await withClearedProviderApiKeys(async () => {

@@ -20,7 +20,7 @@ const messageContentSchema = z.union([
 
 /** Zod schema for a single chat message, enforcing valid roles and content rules. */
 export const messageSchema = z.object({
-  role: z.enum(["system", "user", "assistant", "tool"]),
+  role: z.enum(["system", "user", "assistant", "tool", "developer"]),
   content: messageContentSchema,
   name: z.string().optional(),
   tool_call_id: z.string().optional(),
@@ -47,5 +47,7 @@ export const chatCompletionRequestSchema = z.object({
   tools: z.array(z.unknown()).optional(),
   tool_choice: z.unknown().optional(),
   response_format: z.unknown().optional(),
+  reasoning_effort: z.enum(["minimal", "low", "medium", "high"]).optional(),
+  stream_options: z.object({ include_usage: z.boolean().optional() }).optional(),
   mode: z.enum(["balanced", "quality", "speed", "survival"]).optional(),
 });

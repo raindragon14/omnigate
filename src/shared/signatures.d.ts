@@ -177,7 +177,7 @@ export type ChatMessageContentPart = ChatMessageTextContentPart | {
 
 /** A single message in an OpenAI-compatible chat conversation. */
 export type ChatMessage = {
-  role: "system" | "user" | "assistant" | "tool";
+  role: "system" | "user" | "assistant" | "tool" | "developer";
   content: string | null | ChatMessageContentPart[];
   name?: string | undefined;
   tool_call_id?: string | undefined;
@@ -188,6 +188,9 @@ export type ChatMessage = {
 export type RouterChatMessage = Omit<ChatMessage, "content"> & {
   content: string | null;
 };
+
+/** Chat completion reasoning effort forwarded to reasoning-capable providers. */
+export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
 
 /** Incoming request body for POST /v1/chat/completions (OpenAI-compatible shape). */
 export type OpenAIChatRequest = {
@@ -200,6 +203,8 @@ export type OpenAIChatRequest = {
   tools?: unknown[] | undefined;
   tool_choice?: unknown | undefined;
   response_format?: unknown | undefined;
+  reasoning_effort?: ReasoningEffort | undefined;
+  stream_options?: { include_usage?: boolean | undefined } | undefined;
   /** Routing mode override. When omitted, defaults to "balanced". */
   mode?: RoutingMode | undefined;
 };
@@ -215,6 +220,8 @@ export type RouterRequest = {
   tools?: unknown[] | undefined;
   toolChoice?: unknown | undefined;
   responseFormat?: unknown | undefined;
+  reasoningEffort?: ReasoningEffort | undefined;
+  streamOptions?: { includeUsage?: boolean | undefined } | undefined;
   mode: RoutingMode;
 };
 
@@ -241,6 +248,8 @@ export type ProviderCandidate = {
   supportsTools: boolean;
   supportsJson: boolean;
   supportsStreaming: boolean;
+  supportsReasoning: boolean;
+  maxTokensField?: "max_tokens" | "max_completion_tokens" | undefined;
   rateLimit: ProviderRateLimit;
 };
 

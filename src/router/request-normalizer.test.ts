@@ -120,4 +120,35 @@ describe("request normalizer", () => {
       tool_calls: [{ id: "call_1" }],
     });
   });
+
+  test("maps developer role to system", () => {
+    const routerRequest = normalizeRequest({
+      model: "test",
+      messages: [{ role: "developer", content: "be precise" }],
+    });
+
+    expect(routerRequest.messages).toEqual([{ role: "system", content: "be precise" }]);
+  });
+
+  test("forwards reasoning_effort and stream_options", () => {
+    const routerRequest = normalizeRequest({
+      model: "test",
+      messages: [{ role: "user", content: "hi" }],
+      reasoning_effort: "high",
+      stream_options: { include_usage: true },
+    });
+
+    expect(routerRequest.reasoningEffort).toBe("high");
+    expect(routerRequest.streamOptions).toEqual({ includeUsage: true });
+  });
+
+  test("leaves reasoningEffort and streamOptions undefined when absent", () => {
+    const routerRequest = normalizeRequest({
+      model: "test",
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(routerRequest.reasoningEffort).toBeUndefined();
+    expect(routerRequest.streamOptions).toBeUndefined();
+  });
 });
