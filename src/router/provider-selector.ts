@@ -19,12 +19,14 @@ export function selectProviderCandidates(input: ProviderSelectionInput): Provide
   const shouldAllowPaid = aliasConfig.allow_paid === true;
   const shouldRequireTools = request.tools !== undefined && request.tools.length > 0;
   const shouldRequireJson = request.responseFormat !== undefined;
+  const shouldRequireReasoning = request.reasoningEffort !== undefined;
 
   return providers.filter((provider) => isProviderEligible(provider, aliasConfig, {
     input,
     shouldAllowPaid,
     shouldRequireTools,
     shouldRequireJson,
+    shouldRequireReasoning,
   }));
 }
 
@@ -33,6 +35,7 @@ type ProviderEligibilityOptions = {
   shouldAllowPaid: boolean;
   shouldRequireTools: boolean;
   shouldRequireJson: boolean;
+  shouldRequireReasoning: boolean;
 };
 
 function isProviderEligible(
@@ -40,7 +43,7 @@ function isProviderEligible(
   aliasConfig: AliasConfig,
   options: ProviderEligibilityOptions,
 ): boolean {
-  const { input, shouldAllowPaid, shouldRequireTools, shouldRequireJson } = options;
+  const { input, shouldAllowPaid, shouldRequireTools, shouldRequireJson, shouldRequireReasoning } = options;
   const { request, cooldownStore, resolveApiKey, nowMs } = input;
 
   if (!aliasConfig.families.includes(provider.family)) {
@@ -59,7 +62,7 @@ function isProviderEligible(
     return false;
   }
 
-  return canProviderServeFeatures(provider, request, shouldRequireTools, shouldRequireJson);
+  return canProviderServeFeatures(provider, request, shouldRequireTools, shouldRequireJson, shouldRequireReasoning);
 }
 
 function hasProviderApiKey(
@@ -76,12 +79,17 @@ function canProviderServeFeatures(
   request: ProviderSelectionInput["request"],
   shouldRequireTools: boolean,
   shouldRequireJson: boolean,
+  shouldRequireReasoning: boolean,
 ): boolean {
   if (shouldRequireTools && !provider.supportsTools) {
     return false;
   }
 
   if (shouldRequireJson && !provider.supportsJson) {
+    return false;
+  }
+
+  if (shouldRequireReasoning && !provider.supportsReasoning) {
     return false;
   }
 

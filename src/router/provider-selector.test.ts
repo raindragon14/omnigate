@@ -5,15 +5,15 @@ import { createProviderCooldownStore } from "./provider-cooldown";
 import { selectProviderCandidates } from "./provider-selector";
 
 const ALL_PROVIDERS: ProviderCandidate[] = [
-  { id: "alpha", baseUrl: "", model: "", family: "chat-fast", priority: 80, qualityScore: 80, enabled: true, paidFallback: false, apiKeyEnv: "KEY_A", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "beta", baseUrl: "", model: "", family: "chat-fast", priority: 90, qualityScore: 90, enabled: true, paidFallback: false, apiKeyEnv: "KEY_B", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "gamma", baseUrl: "", model: "", family: "chat-quality", priority: 100, qualityScore: 85, enabled: true, paidFallback: false, apiKeyEnv: "KEY_C", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "delta", baseUrl: "", model: "", family: "chat-fast", priority: 70, qualityScore: 70, enabled: false, paidFallback: false, apiKeyEnv: "KEY_D", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "epsilon", baseUrl: "", model: "", family: "chat-fast", priority: 50, qualityScore: 50, enabled: true, paidFallback: true, apiKeyEnv: "KEY_E", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "zeta", baseUrl: "", model: "", family: "chat-fast", priority: 60, qualityScore: 60, enabled: true, paidFallback: false, apiKeyEnv: "KEY_F", context: 100000, supportsTools: false, supportsJson: true, supportsStreaming: true, rateLimit: {} },
-  { id: "eta", baseUrl: "", model: "", family: "chat-fast", priority: 55, qualityScore: 55, enabled: true, paidFallback: false, apiKeyEnv: "KEY_G", context: 100000, supportsTools: true, supportsJson: false, supportsStreaming: true, rateLimit: {} },
-  { id: "theta", baseUrl: "", model: "", family: "chat-fast", priority: 45, qualityScore: 45, enabled: true, paidFallback: false, apiKeyEnv: "KEY_H", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: false, rateLimit: {} },
-  { id: "iota", baseUrl: "", model: "", family: "chat-fast", priority: 35, qualityScore: 35, enabled: true, paidFallback: false, apiKeyEnv: "KEY_I", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, rateLimit: {} },
+  { id: "alpha", baseUrl: "", model: "", family: "chat-fast", priority: 80, qualityScore: 80, enabled: true, paidFallback: false, apiKeyEnv: "KEY_A", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsReasoning: true, rateLimit: {} },
+  { id: "beta", baseUrl: "", model: "", family: "chat-fast", priority: 90, qualityScore: 90, enabled: true, paidFallback: false, apiKeyEnv: "KEY_B", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsReasoning: true, rateLimit: {} },
+  { id: "gamma", baseUrl: "", model: "", family: "chat-quality", priority: 100, qualityScore: 85, enabled: true, paidFallback: false, apiKeyEnv: "KEY_C", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsReasoning: true, rateLimit: {} },
+  { id: "delta", baseUrl: "", model: "", family: "chat-fast", priority: 70, qualityScore: 70, enabled: false, paidFallback: false, apiKeyEnv: "KEY_D", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsReasoning: true, rateLimit: {} },
+  { id: "epsilon", baseUrl: "", model: "", family: "chat-fast", priority: 50, qualityScore: 50, enabled: true, paidFallback: true, apiKeyEnv: "KEY_E", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsReasoning: true, rateLimit: {} },
+  { id: "zeta", baseUrl: "", model: "", family: "chat-fast", priority: 60, qualityScore: 60, enabled: true, paidFallback: false, apiKeyEnv: "KEY_F", context: 100000, supportsTools: false, supportsJson: true, supportsStreaming: true, supportsReasoning: true, rateLimit: {} },
+  { id: "eta", baseUrl: "", model: "", family: "chat-fast", priority: 55, qualityScore: 55, enabled: true, paidFallback: false, apiKeyEnv: "KEY_G", context: 100000, supportsTools: true, supportsJson: false, supportsStreaming: true, supportsReasoning: true, rateLimit: {} },
+  { id: "theta", baseUrl: "", model: "", family: "chat-fast", priority: 45, qualityScore: 45, enabled: true, paidFallback: false, apiKeyEnv: "KEY_H", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: false, supportsReasoning: true, rateLimit: {} },
+  { id: "iota", baseUrl: "", model: "", family: "chat-fast", priority: 35, qualityScore: 35, enabled: true, paidFallback: false, apiKeyEnv: "KEY_I", context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsReasoning: false, rateLimit: {} },
 ];
 
 const MOCK_ALIASES = {
@@ -127,6 +127,21 @@ describe("selectProviderCandidates", () => {
 
     expect(result.some((provider) => provider.id === "theta")).toBe(false);
     expect(result.some((provider) => provider.id === "alpha")).toBe(true);
+  });
+
+  test("excludes providers without reasoning support when request has reasoning_effort", () => {
+    const result = selectProviderCandidates(makeInput({
+      request: { model: "omnigate/auto-fast", messages: [], stream: false, mode: "balanced", reasoningEffort: "high" },
+    }));
+
+    expect(result.some((provider) => provider.id === "iota")).toBe(false);
+    expect(result.some((provider) => provider.id === "alpha")).toBe(true);
+  });
+
+  test("includes providers without reasoning support when request has none", () => {
+    const result = selectProviderCandidates(makeInput());
+
+    expect(result.some((provider) => provider.id === "iota")).toBe(true);
   });
 
   test("matches correct family", () => {
