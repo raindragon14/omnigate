@@ -5,56 +5,57 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/raindragon14/omnigate/ci.yml?branch=main&style=flat-square&logo=github)](https://github.com/raindragon14/omnigate/actions)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker)](https://github.com/raindragon14/omnigate/pkgs/container/omnigate)
 
-**One local OpenAI-compatible endpoint that pools free LLM providers behind a single base URL with automatic fallback and intelligent routing.**
+**A local OpenAI-compatible endpoint that pools free LLM providers behind a single base URL, with automatic fallback and performance-based routing.**
 
 ---
 
 ## Table of Contents
 
-- [Why This Exists](#why-this-exists)
+- [Overview](#overview)
 - [Quick Start](#quick-start)
+- [Architecture](#architecture)
 - [How It Works](#how-it-works)
 - [Usage](#usage-openai-sdk)
 - [Configuration](#configuration)
-- [Technical Decisions](#technical-decisions-and-why)
-- [What's Not Done Yet](#whats-not-done-yet)
+- [Technical Decisions](#technical-decisions)
+- [Roadmap](#roadmap)
 - [Development](#development)
 - [Contributing](#contributing)
 - [License](#license)
 
 ---
 
-## Why This Exists
+## Overview
 
-I got tired of juggling API keys. Groq for speed, Together for quality, Fireworks for coding — each with different rate limits, different model names, different failure modes. I'd switch manually when one hit a 429, which meant I was always reacting, never ahead.
+OmniGate consolidates several free-tier LLM providers (Groq, Together, Fireworks, and others) behind one OpenAI-compatible endpoint. Each provider has its own rate limits, model names, and failure modes; managing them individually means reacting to 429 responses and switching providers by hand.
 
-The insight: **treat providers as a pool, not a pick**. Every request generates signal — latency, throughput, error rate, quota burn. Store that in SQLite. Next request, route to the provider that's _actually_ performing best _right now_ for _that kind of request_. The system gets smarter the more you use it.
+OmniGate treats providers as a pool rather than a fixed choice. Every request produces signals — latency, throughput, error rate, quota consumption — which are recorded in SQLite. Each new request is routed to the provider currently performing best for that request profile, so routing accuracy improves with use.
 
-Result: one `baseURL`, one API key. It just works, and it gets faster over time.
+The result is a single `baseURL` and a single API key.
 
 ---
 
 ## Quick Start
 
-### Docker (easiest)
+### Docker (recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/raindragon14/omnigate/main/deploy.sh | bash
 ```
 
-Generates your `OMNIGATE_API_KEY`, sets up a systemd service, runs on `127.0.0.1:8787`.
+This generates an `OMNIGATE_API_KEY`, installs a systemd service, and starts the gateway on `127.0.0.1:8787`.
 
 ### Local
 
 ```bash
 git clone https://github.com/raindragon14/omnigate && cd omnigate
 cp .env.example .env
-# Add OMNIGATE_API_KEY + at least one provider key (PROVIDER_A_API_KEY, etc.)
+# Set OMNIGATE_API_KEY and at least one provider key (PROVIDER_A_API_KEY, etc.)
 bun install
 bun run dev
 ```
 
-Test it:
+Verify the installation:
 
 ```bash
 curl http://localhost:8787/health
@@ -83,22 +84,22 @@ flowchart TD
     SQLite -->|observe & persist| Scorer
 ```
 
-**Request flow**: Authenticate → Match alias to families → Filter by features/API key/cooldown → Score by weighted signals → Try top provider → Fallback on retryable errors → Return first success.
+**Request flow:** authenticate → match alias to provider families → filter by features, API key availability, and cooldown → score by weighted signals → attempt the highest-ranked provider → fall back on retryable errors → return the first successful response.
 
 ---
 
 ## How It Works
 
-**Signals we track per provider:**
+**Signals tracked per provider:**
 
-- **Throughput** — completion tokens / total latency
-- **Latency** — end-to-end (JSON) or TTFT (streaming)
-- **Quality** — static score from registry (0–100)
-- **Reliability** — 1 − (failures + rate_limits) / total_requests
-- **Quota pressure** — daily_requests / rpd_limit
+- **Throughput** — completion tokens divided by total latency
+- **Latency** — end-to-end for JSON responses, time to first token for streaming
+- **Quality** — static score from the registry (0–100)
+- **Reliability** — 1 − (failures + rate limits) / total requests
+- **Quota pressure** — daily requests divided by the daily limit
 - **Feature match** — tools, JSON mode, streaming, reasoning effort (hard filter)
 
-**Routing modes** (pass `mode` in request body):
+**Routing modes** (set `mode` in the request body):
 
 | Mode       | Bias                                        |
 | ---------- | ------------------------------------------- |
@@ -107,11 +108,9 @@ flowchart TD
 | `quality`  | 3× quality, 0.5× speed                      |
 | `survival` | 3× reliability/quota, avoids paid fallbacks |
 
-Alias-level overrides live in `provider.registry.yaml` — see `omnigate/coding-fast` for an example.
+Alias-level overrides are defined in `src/config/provider.registry.yaml`; see `omnigate/coding-fast` for an example.
 
-**Fallback triggers:** 429, 5xx, timeout, network error, malformed response.  
-**Stops on:** other 4xx (client errors).  
-**Cooldown:** exponential backoff, persisted in SQLite.
+**Fallback** is triggered by 429, 5xx, timeout, network errors, and malformed responses. Routing stops on other 4xx client errors. **Cooldown** uses exponential backoff and is persisted in SQLite.
 
 ---
 
@@ -125,7 +124,7 @@ const openai = new OpenAI({
   apiKey: process.env.OMNIGATE_API_KEY,
 });
 
-// Basic
+// Basic request
 const completion = await openai.chat.completions.create({
   model: "omnigate/auto-fast",
   messages: [{ role: "user", content: "Explain quantum entanglement" }],
@@ -148,10 +147,10 @@ await openai.chat.completions.create({
 });
 ```
 
-**Extra request fields:**
+**Additional request fields:**
 
-- `reasoning_effort` (`minimal` | `low` | `medium` | `high`) — forwarded upstream only to providers with `supports_reasoning: true`; providers without the flag are excluded from routing for that request (hard filter, like tools).
-- `stream_options: { include_usage: true }` — forwarded on streaming requests so upstream returns the usage chunk.
+- `reasoning_effort` (`minimal` | `low` | `medium` | `high`) — forwarded upstream only to providers with `supports_reasoning: true`. Providers without the flag are excluded from routing for that request (hard filter, as with tools).
+- `stream_options: { include_usage: true }` — forwarded on streaming requests so the upstream returns the usage chunk.
 - `role: "developer"` messages are accepted and normalized to `system` before routing.
 - `max_tokens` is sent using each provider's `max_tokens_field` (`max_tokens` by default, or `max_completion_tokens` when configured in the registry).
 
@@ -170,7 +169,7 @@ await openai.chat.completions.create({
 
 ### Provider Registry
 
-Edit `src/config/provider.registry.yaml`. Example entry:
+Providers are configured in `src/config/provider.registry.yaml`:
 
 ```yaml
 providers:
@@ -192,7 +191,7 @@ providers:
       rpm: 30
 ```
 
-**Aliases** (what clients actually call):
+**Aliases** (the model names clients request):
 
 ```yaml
 aliases:
@@ -206,39 +205,39 @@ aliases:
     tiebreak: speed
 ```
 
-Add a provider → add its `api_key_env` to `.env` → restart. That's it.
+To add a provider, add its `api_key_env` to `.env` and restart the service.
 
 ---
 
-## Technical Decisions (And Why)
+## Technical Decisions
 
-**Bun over Node/Deno** — Native SQLite, no transpile step, built-in test runner, fast cold starts. The `bun:sqlite` API is clean and fast enough for our write-heavy stats workload.
+**Bun over Node/Deno** — Native SQLite access, no transpile step, a built-in test runner, and fast cold starts. The `bun:sqlite` API handles the write-heavy stats workload without additional dependencies.
 
-**Hono** — Zero deps, ~14KB, edge-ready, TypeScript inference that actually works. Express would've been fine but heavier; Fastify adds complexity we don't need.
+**Hono** — Small dependency footprint (~14 KB) with accurate TypeScript inference. Express would add unnecessary weight; Fastify adds complexity that is not required here.
 
-**SQLite (`bun:sqlite`)** — Not Postgres, not Redis. Single file, survives restarts, zero config, handles our write volume easily. We're not clustering yet.
+**SQLite (`bun:sqlite`)** — A single-file database that survives restarts and needs no configuration. The current write volume is well within SQLite's limits; clustering is not required yet.
 
-**YAML registry** — Not JSON, not TypeScript config. Human-editable, diffs cleanly in PRs, no recompile needed. Hot-reload would be nice but explicit restart is safer for production.
+**YAML registry** — Human-editable and diff-friendly, and changes require no recompilation. Hot reload is deliberately omitted: an explicit restart is safer and easier to reason about in production.
 
-**OpenAI-compatible API** — Not a custom schema. Drop-in for any OpenAI SDK client. Zero learning curve. The `mode` parameter is our only extension.
+**OpenAI-compatible API** — Drop-in compatibility with any OpenAI SDK client. The `mode` parameter is the only extension to the standard schema.
 
-**Constant-time auth** — `timingSafeEqual` on the Bearer token. Paranoid? Maybe. But it's three lines of code and eliminates a timing attack vector.
+**Constant-time auth** — Bearer tokens are compared with `timingSafeEqual`, which removes a timing side channel at negligible cost.
 
-**Streaming passthrough** — No buffering, no transformation. SSE bytes flow straight through. Memory stays flat regardless of response size.
+**Streaming passthrough** — SSE bytes are forwarded without buffering or transformation, so memory use stays flat regardless of response size.
 
-**No registry hot-reload** — File watchers add complexity and failure modes. Restart is explicit, visible, and safe. We'll add it when someone actually needs it.
+**No registry hot-reload** — File watchers introduce complexity and new failure modes. Restart is explicit and observable. Hot reload will be added when there is a concrete need for it.
 
 ---
 
-## What's Not Done Yet
+## Roadmap
 
-- Multi-node (Redis-backed stats) — single instance only for now
-- Cost tracking per provider/request
+- Multi-node deployment (Redis-backed stats); single instance only for now
+- Cost tracking per provider and request
 - Prometheus `/metrics` endpoint
 - Admin dashboard
-- Request/response logging (opt-in)
+- Opt-in request/response logging
 
-These are intentional omissions, not oversights. The core routing loop is solid. Everything else waits for real demand.
+These are deliberate omissions rather than oversights: the core routing loop is stable, and further work will be driven by demand.
 
 ---
 
@@ -247,12 +246,12 @@ These are intentional omissions, not oversights. The core routing loop is solid.
 ```bash
 bun install
 bun run dev          # Watch mode
-bun test             # Unit + integration (132 tests)
-bun run typecheck    # Strict TS
+bun test             # Unit and integration tests
+bun run typecheck    # Strict TypeScript
 bun x prettier --write .
 ```
 
-CI runs `typecheck` → `test` on every push.
+CI runs `typecheck` followed by `test` on every push.
 
 ---
 
@@ -264,8 +263,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).
 
 ---
 
-Built by [raindragon14](https://github.com/raindragon14). Issues and PRs welcome.
+Maintained by [raindragon14](https://github.com/raindragon14). Issues and pull requests are welcome.
