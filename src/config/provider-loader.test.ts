@@ -42,6 +42,34 @@ describe("provider loader", () => {
     expect(provider!.paidFallback).toBe(false);
   });
 
+  test("parses supports_reasoning and max_tokens_field", () => {
+    const registry = parseProviderRegistry({
+      ...VALID_REGISTRY,
+      providers: [{
+        ...VALID_REGISTRY.providers[0],
+        supports_reasoning: true,
+        max_tokens_field: "max_completion_tokens",
+      }],
+    });
+    const provider = registry.providers[0];
+
+    expect(provider!.supportsReasoning).toBe(true);
+    expect(provider!.maxTokensField).toBe("max_completion_tokens");
+  });
+
+  test("defaults supportsReasoning to false and maxTokensField to undefined", () => {
+    const provider = parseProviderRegistry(VALID_REGISTRY).providers[0];
+
+    expect(provider!.supportsReasoning).toBe(false);
+    expect(provider!.maxTokensField).toBeUndefined();
+  });
+
+  test("rejects invalid max_tokens_field", () => {
+    const provider = { ...VALID_REGISTRY.providers[0], max_tokens_field: "tokens" };
+
+    expect(() => parseProviderRegistry({ ...VALID_REGISTRY, providers: [provider] })).toThrow(REGISTRY_ERROR_MESSAGE);
+  });
+
   test("rejects missing providers", () => {
     expect(() => parseProviderRegistry({ aliases: VALID_REGISTRY.aliases })).toThrow(REGISTRY_ERROR_MESSAGE);
   });
