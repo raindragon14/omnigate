@@ -14,7 +14,7 @@ export class UnsupportedMessageContentError extends Error {
 /**
  * Strips unknown provider-specific fields (e.g. extra_body) from an incoming
  * OpenAI-compatible request and converts it into the canonical RouterRequest
- * shape used internally by the routing engine.
+ * shape used internally by the routing engine.  Maps `developer` roles to `system`.
  * @param request  The raw incoming request body.
  * @returns A normalised RouterRequest with snake_case converted to camelCase.
  */
@@ -29,14 +29,21 @@ export function normalizeRequest(request: OpenAIChatRequest): RouterRequest {
     tools: request.tools,
     toolChoice: request.tool_choice,
     responseFormat: request.response_format,
+    reasoningEffort: request.reasoning_effort,
+    streamOptions: request.stream_options === undefined
+      ? undefined
+      : { includeUsage: request.stream_options.include_usage },
     mode: request.mode ?? DEFAULT_RESPONSE_MODE,
   };
 }
 
 function normalizeMessage(message: ChatMessage): RouterChatMessage {
+  const role: ChatMessage["role"] = message.role === "developer" ? "system" : message.role;
+
   return {
     ...message,
-    content: normalizeMessageContent(message.role, message.content),
+    role,
+    content: normalizeMessageContent(role, message.content),
   };
 }
 
