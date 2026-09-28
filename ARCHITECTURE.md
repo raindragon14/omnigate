@@ -93,16 +93,20 @@ score = Σ(weight_i × normalized_signal_i) + tiebreaker_bonus
 
 ### 4. Features (`src/feature/`)
 
-| Feature         | Route                       | Auth | Description                  |
-| --------------- | --------------------------- | ---- | ---------------------------- |
-| Health          | `GET /health`               | No   | Liveness probe               |
-| Models          | `GET /v1/models`            | Yes  | Lists aliases + capabilities |
-| Chat Completion | `POST /v1/chat/completions` | Yes  | Main routing entrypoint      |
+| Feature         | Route                                                          | Auth | Description                                                   |
+| --------------- | -------------------------------------------------------------- | ---- | ------------------------------------------------------------- |
+| Health          | `GET /health`                                                  | No   | Liveness probe                                                |
+| Models          | `GET /v1/models`                                               | Yes  | Lists aliases + capabilities                                  |
+| Chat Completion | `POST /v1/chat/completions`                                    | Yes  | Main routing entrypoint                                       |
+| Metrics         | `GET /metrics`                                                 | Yes  | Prometheus exposition (today's stats)                         |
+| Stats           | `GET /v1/stats`                                                | Yes  | Routing stats snapshot as JSON (`?day=`)                      |
+| Admin           | `POST /v1/admin/cooldowns/clear`, `POST /v1/admin/stats/reset` | Yes  | Clear cooldowns (memory + persisted), delete one day of stats |
 
 ### 5. Storage (`src/storage/`)
 
 - **sqlite.database.ts** — Bun SQLite wrapper, connection pooling, migrations
 - **provider-stats.repository.ts** — CRUD for `providers`, `requests`, `daily_stats` tables
+- **stats-store.ts** — shared configured DB + repository for chat, metrics, and admin (single seam for a future Redis swap; new stats consumers must use it, not open their own connection)
 
 **Schema:**
 
@@ -110,6 +114,8 @@ score = Σ(weight_i × normalized_signal_i) + tiebreaker_bonus
 providers (id, family, quality_score, speed_score, ...)
 requests (id, provider_id, alias, mode, latency_ms, tokens, status, timestamp)
 daily_stats (provider_id, date, requests, errors, rate_limits, total_latency, total_tokens)
+provider_stats (provider_id, model_family, day, request_count, token_count,
+  input_token_count, output_token_count, total_cost_usd, ...)
 ```
 
 ### 6. Shared (`src/shared/`)
@@ -180,6 +186,9 @@ sequenceDiagram
 ## Observability
 
 - **Health**: `GET /health` → `{"status":"ok","service":"omnigate"}`
+- **Metrics**: `GET /metrics` (auth) → Prometheus text; only bounded labels (`provider_id`, `model_family`); today's UTC day only
+- **Stats/Admin**: `GET /v1/stats`, `POST /v1/admin/cooldowns/clear`, `POST /v1/admin/stats/reset` (all auth; admin shares the gateway key)
+- **Correlation**: every response carries `x-request-id`; each chat completion emits one JSON log line (`request_id`, model, status, `latency_ms`); bodies only with `OMNIGATE_LOG_BODIES=true`
 - **Models**: `GET /v1/models` → Lists active aliases with capabilities
 - **Stats**: Query SQLite directly for per-provider latency, throughput, error rates
 - **Logs**: Structured JSON via `console.log` (extendable to Pino/Winston)
@@ -194,9 +203,20 @@ sequenceDiagram
 | SQLite unavailable                   | Startup fails fast (no silent degradation) |
 | Invalid registry YAML                | Startup fails with Zod validation error    |
 
+## Known Technical Debt
+
+Verified during the Fase 0–1 hardening pass; listed here instead of refactored, in priority order:
+
+- **Prettier baseline is dirty** — ~18 untouched files reformat under repo-wide `prettier --write`. Format only touched files until a dedicated baseline commit. `docker-compose.yml` is guarded via `.prettierignore` (prettier mangles its healthcheck quoting).
+- **Admin shares the client API key** — no separate admin key or RBAC. Deferred until multi-operator use; revisit before multi-tenant deployments.
+- **Streaming attempts record no tokens or cost** — usage is unknown mid-passthrough by design (see GLOSSARY §5.3). Undercounts cost for streaming-heavy workloads; accepted until streaming cost proves material.
+- **Cooldown tests must use real timestamps** — `setCooldown` prunes against `Date.now()`, so fake-clock fixtures are silently dropped. Noted in AGENTS.md.
+
+Resolved: body-logging flag reset (now part of `resetChatCompletionRoutingState`).
+
 ## Future Architecture Considerations
 
 - **Multi-node**: Redis-backed stats + distributed cooldown
-- **Cost tracking**: Add `cost_per_token` to registry, aggregate in `daily_stats`
-- **Prometheus metrics**: `/metrics` endpoint with provider-level gauges
-- **Admin API**: Provider enable/disable, manual cooldown clear, stats reset
+- **Cost tracking**: done in Fase 0 (registry tariffs + per-attempt accumulation); `cost_per_task_success` per profile still planned
+- **Prometheus metrics**: done in Fase 1 (`GET /metrics`); p50/p95 percentiles still planned
+- **Admin API**: cooldown clear + stats reset done in Fase 1; provider enable/disable deliberately omitted (registry stays the single source of truth)

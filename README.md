@@ -154,18 +154,35 @@ await openai.chat.completions.create({
 - `role: "developer"` messages are accepted and normalized to `system` before routing.
 - `max_tokens` is sent using each provider's `max_tokens_field` (`max_tokens` by default, or `max_completion_tokens` when configured in the registry).
 
+Every response carries an `x-request-id` header for log correlation (never a metric label). Chat-completion requests also emit one structured JSON log line with `request_id`, model, status, and latency. Per-attempt token splits and upstream cost (USD, when the provider tariff is configured) accumulate in SQLite (`input_token_count`, `output_token_count`, `total_cost_usd`).
+
+### Observability & Admin
+
+- `GET /metrics` (auth required) — Prometheus text exposition for today's per-provider stats. Scrape with a bearer token:
+  ```yaml
+  scrape_configs:
+    - job_name: "omnigate"
+      bearer_token: "<OMNIGATE_API_KEY>"
+      static_configs:
+        - targets: ["127.0.0.1:8787"]
+  ```
+- `GET /v1/stats` (auth) — today's routing stats as JSON (`?day=YYYY-MM-DD` for history). Active cooldowns show as future `cooldown_until` values.
+- `POST /v1/admin/cooldowns/clear` (auth) — clears in-memory + persisted cooldowns; `{ "provider_id": "..." }` for one provider, `{}` for all.
+- `POST /v1/admin/stats/reset` (auth) — deletes one day of stats (`{ "day": "YYYY-MM-DD" }`, defaults to today). There is deliberately no enable/disable endpoint: the YAML registry stays the single source of truth (restart to change it).
+
 ---
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable             | Required     | Default                 | Notes                           |
-| -------------------- | ------------ | ----------------------- | ------------------------------- |
-| `OMNIGATE_API_KEY`   | Yes          | —                       | Client auth token               |
-| `PORT`               | No           | `8787`                  | HTTP port                       |
-| `OMNIGATE_DB_PATH`   | No           | `.data/omnigate.sqlite` | SQLite file                     |
-| `PROVIDER_*_API_KEY` | Per provider | —                       | Match `api_key_env` in registry |
+| Variable              | Required     | Default                 | Notes                                                           |
+| --------------------- | ------------ | ----------------------- | --------------------------------------------------------------- |
+| `OMNIGATE_API_KEY`    | Yes          | —                       | Client auth token (also guards `/metrics` and `/v1/admin/*`)    |
+| `PORT`                | No           | `8787`                  | HTTP port                                                       |
+| `OMNIGATE_DB_PATH`    | No           | `.data/omnigate.sqlite` | SQLite file                                                     |
+| `OMNIGATE_LOG_BODIES` | No           | `false`                 | Set `true` to log chat request/response bodies (debugging only) |
+| `PROVIDER_*_API_KEY`  | Per provider | —                       | Match `api_key_env` in registry                                 |
 
 ### Provider Registry
 
@@ -187,6 +204,10 @@ providers:
     supports_streaming: true
     supports_reasoning: true
     # max_tokens_field: max_completion_tokens   # optional upstream body key
+    # cost:                                     # optional tariff in USD per 1M tokens
+    #   input_per_1m: 0.15                      # omit when unknown (cost recorded as unknown, not zero)
+    #   output_per_1m: 0.60
+    #   source: "vendor pricing page"
     rate_limit:
       rpm: 30
 ```

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Prometheus `GET /metrics` endpoint (authenticated) with per-provider gauges for today's stats
+- Admin API: `GET /v1/stats`, `POST /v1/admin/cooldowns/clear`, `POST /v1/admin/stats/reset`
+- Opt-in chat request/response body logging via `OMNIGATE_LOG_BODIES`
+- Shared SQLite stats store (`src/storage/stats-store.ts`) used by chat, metrics, and admin features
+- Per-provider cost tariffs (`cost: {input_per_1m, output_per_1m}` in USD, registry) with per-attempt cost accumulation in SQLite (`input_token_count`, `output_token_count`, `total_cost_usd`)
+- Per-request `x-request-id` response header plus one structured JSON log line per chat-completion request
+- Offline evaluation harness in `eval/` (`bun run eval --router <oracle|random|fixed|omnigate>`, seeded random baseline, Q&A judge, per-split summaries, `--save` artifacts)
+- Alias profile schema in the registry (`profiles:` → `categories`, `min_quality_ratio`) validated at startup
+- Offline profile quality gate (`bun run eval:check`) comparing saved router results against `min_quality_ratio`
+- End-to-end smoke script (`bun run smoke:e2e`, 9 live checks: health, auth, fallback, SQLite, metrics, stats, log correlation, admin ops)
 - Mermaid architecture diagram in README
 - ARCHITECTURE.md with system design deep-dive
 - CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md
@@ -20,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README restructured with Table of Contents
 - README: added real provider example (Groq Llama 3)
 - README: replaced ASCII flow with Mermaid diagram
+- Body-logging flag is now part of `resetChatCompletionRoutingState` (routing-state reset covers it)
+- Metrics and admin tests reset routing state after each test (no cross-test cooldown leakage)
+
+### Fixed
+
+- `normalizeAnswer` strips leading articles after whitespace collapse (eval judge normalization)
 
 ## [1.0.0] - 2024-01-15
 
