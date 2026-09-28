@@ -1,0 +1,79 @@
+{
+  "name": "qa-sample",
+  "category": "knowledge",
+  "description": "Hand-written dev sample (12 items, 8 validation + 4 test). NOT a benchmark: for harness iteration only. Real category suites (LiveCodeBench, AIME/MATH, SimpleQA, WritingBench) plug in via the same JSON shape.",
+  "items": [
+    {
+      "id": "qa-01",
+      "split": "validation",
+      "question": "What is the capital of France?",
+      "answers": ["Paris"]
+    },
+    {
+      "id": "qa-02",
+      "split": "validation",
+      "question": "What is the capital of Japan?",
+      "answers": ["Tokyo"]
+    },
+    {
+      "id": "qa-03",
+      "split": "validation",
+      "question": "How many days are in a leap year?",
+      "answers": ["366", "366 days"]
+    },
+    {
+      "id": "qa-04",
+      "split": "validation",
+      "question": "What planet is known as the Red Planet?",
+      "answers": ["Mars"]
+    },
+    {
+      "id": "qa-05",
+      "split": "validation",
+      "question": "What is the chemical symbol for water?",
+      "answers": ["H2O"]
+    },
+    {
+      "id": "qa-06",
+      "split": "validation",
+      "question": "Who wrote Romeo and Juliet?",
+      "answers": ["William Shakespeare", "Shakespeare"]
+    },
+    {
+      "id": "qa-07",
+      "split": "validation",
+      "question": "What is the largest ocean on Earth?",
+      "answers": ["Pacific Ocean", "Pacific"]
+    },
+    {
+      "id": "qa-08",
+      "split": "validation",
+      "question": "How many continents are there?",
+      "answers": ["7", "seven"]
+    },
+    {
+      "id": "qa-09",
+      "split": "test",
+      "question": "What is the capital of Australia?",
+      "answers": ["Canberra"]
+    },
+    {
+      "id": "qa-10",
+      "split": "test",
+      "question": "What gas do plants absorb for photosynthesis?",
+      "answers": ["Carbon dioxide", "CO2"]
+    },
+    {
+      "id": "qa-11",
+      "split": "test",
+      "question": "In which year did humans first land on the Moon?",
+      "answers": ["1969"]
+    },
+    {
+      "id": "qa-12",
+      "split": "test",
+      "question": "What is the hardest natural substance on Earth?",
+      "answers": ["Diamond"]
+    }
+  ]
+}

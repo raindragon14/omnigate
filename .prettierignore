@@ -1,0 +1,3 @@
+# Prettier must not reformat this file: its quote style rewrite breaks the
+# Docker healthcheck command. See ARCHITECTURE.md "Known Technical Debt".
+docker-compose.yml

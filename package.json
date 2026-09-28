@@ -6,9 +6,12 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "dev": "bun run --watch src/server.ts",
-    "test": "bun test src/ && bun test tests/",
+    "test": "bun test src/ && bun test tests/ && bun test eval/",
     "test:feature": "bun test src/",
     "test:integration": "bun test tests/",
+    "smoke:e2e": "scripts/smoke-e2e.sh",
+    "eval": "bun run eval/run.ts",
+    "eval:check": "bun run eval/check.ts",
     "typecheck": "bun x tsc --noEmit"
   },
   "dependencies": {
