@@ -24,6 +24,7 @@ function makeProvider(overrides: Partial<ProviderCandidate> = {}): ProviderCandi
     supportsStreaming: true,
     supportsReasoning: true,
     rateLimit: {},
+    cost: {},
     ...overrides,
   };
 }
@@ -39,6 +40,9 @@ function makeStats(overrides: Partial<ProviderStatsRecord> = {}): ProviderStatsR
     day: DAY,
     requestCount: 10,
     tokenCount: 1000,
+    inputTokenCount: 600,
+    outputTokenCount: 400,
+    totalCostUsd: 0.001,
     successCount: 10,
     failureCount: 0,
     rateLimitCount: 0,
@@ -52,78 +56,158 @@ function makeStats(overrides: Partial<ProviderStatsRecord> = {}): ProviderStatsR
 describe("provider scoring", () => {
   describe("scoreProvider", () => {
     test("uses configured speed score", () => {
-      const fast = scoreProvider({ request: makeRequest({ mode: "speed" }), provider: makeProvider({ speedScore: 90 }) });
-      const slow = scoreProvider({ request: makeRequest({ mode: "speed" }), provider: makeProvider({ speedScore: 40 }) });
+      const fast = scoreProvider({
+        request: makeRequest({ mode: "speed" }),
+        provider: makeProvider({ speedScore: 90 }),
+      });
+      const slow = scoreProvider({
+        request: makeRequest({ mode: "speed" }),
+        provider: makeProvider({ speedScore: 40 }),
+      });
 
       expect(fast.score).toBeGreaterThan(slow.score);
     });
 
     test("uses configured quality score", () => {
-      const strong = scoreProvider({ request: makeRequest({ mode: "quality" }), provider: makeProvider({ qualityScore: 95 }) });
-      const weak = scoreProvider({ request: makeRequest({ mode: "quality" }), provider: makeProvider({ qualityScore: 50 }) });
+      const strong = scoreProvider({
+        request: makeRequest({ mode: "quality" }),
+        provider: makeProvider({ qualityScore: 95 }),
+      });
+      const weak = scoreProvider({
+        request: makeRequest({ mode: "quality" }),
+        provider: makeProvider({ qualityScore: 50 }),
+      });
 
       expect(strong.score).toBeGreaterThan(weak.score);
     });
 
     test("uses observed tokens per second when stats exist", () => {
-      const fast = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ avgTokensPerSecond: 90 }) });
-      const slow = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ avgTokensPerSecond: 20 }) });
+      const fast = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider(),
+        stats: makeStats({ avgTokensPerSecond: 90 }),
+      });
+      const slow = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider(),
+        stats: makeStats({ avgTokensPerSecond: 20 }),
+      });
 
       expect(fast.score).toBeGreaterThan(slow.score);
     });
 
     test("uses lower latency as a positive signal", () => {
-      const quick = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ avgLatencyMs: 500 }) });
-      const delayed = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ avgLatencyMs: 2500 }) });
+      const quick = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider(),
+        stats: makeStats({ avgLatencyMs: 500 }),
+      });
+      const delayed = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider(),
+        stats: makeStats({ avgLatencyMs: 2500 }),
+      });
 
       expect(quick.score).toBeGreaterThan(delayed.score);
     });
 
     test("uses time-to-first-token for streaming latency", () => {
-      const quick = scoreProvider({ request: makeRequest({ stream: true }), provider: makeProvider(), stats: makeStats({ avgTimeToFirstTokenMs: 200 }) });
-      const delayed = scoreProvider({ request: makeRequest({ stream: true }), provider: makeProvider(), stats: makeStats({ avgTimeToFirstTokenMs: 2000 }) });
+      const quick = scoreProvider({
+        request: makeRequest({ stream: true }),
+        provider: makeProvider(),
+        stats: makeStats({ avgTimeToFirstTokenMs: 200 }),
+      });
+      const delayed = scoreProvider({
+        request: makeRequest({ stream: true }),
+        provider: makeProvider(),
+        stats: makeStats({ avgTimeToFirstTokenMs: 2000 }),
+      });
 
       expect(quick.score).toBeGreaterThan(delayed.score);
     });
 
     test("penalizes high failure ratio", () => {
-      const reliable = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ failureCount: 0 }) });
-      const failing = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ failureCount: 8 }) });
+      const reliable = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider(),
+        stats: makeStats({ failureCount: 0 }),
+      });
+      const failing = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider(),
+        stats: makeStats({ failureCount: 8 }),
+      });
 
       expect(reliable.score).toBeGreaterThan(failing.score);
     });
 
     test("penalizes high rate-limit ratio", () => {
-      const available = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ rateLimitCount: 0 }) });
-      const limited = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ rateLimitCount: 8 }) });
+      const available = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider(),
+        stats: makeStats({ rateLimitCount: 0 }),
+      });
+      const limited = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider(),
+        stats: makeStats({ rateLimitCount: 8 }),
+      });
 
       expect(available.score).toBeGreaterThan(limited.score);
     });
 
     test("softens penalties for low sample counts", () => {
-      const lowSample = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ requestCount: 1, failureCount: 1 }) });
-      const fullSample = scoreProvider({ request: makeRequest(), provider: makeProvider(), stats: makeStats({ requestCount: 5, failureCount: 5 }) });
+      const lowSample = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider(),
+        stats: makeStats({ requestCount: 1, failureCount: 1 }),
+      });
+      const fullSample = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider(),
+        stats: makeStats({ requestCount: 5, failureCount: 5 }),
+      });
 
       expect(lowSample.score).toBeGreaterThan(fullSample.score);
     });
 
     test("applies daily quota pressure when configured", () => {
-      const open = scoreProvider({ request: makeRequest(), provider: makeProvider({ rateLimit: { rpd: 100 } }), stats: makeStats({ requestCount: 10 }) });
-      const used = scoreProvider({ request: makeRequest(), provider: makeProvider({ rateLimit: { rpd: 100 } }), stats: makeStats({ requestCount: 90 }) });
+      const open = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider({ rateLimit: { rpd: 100 } }),
+        stats: makeStats({ requestCount: 10 }),
+      });
+      const used = scoreProvider({
+        request: makeRequest(),
+        provider: makeProvider({ rateLimit: { rpd: 100 } }),
+        stats: makeStats({ requestCount: 90 }),
+      });
 
       expect(open.score).toBeGreaterThan(used.score);
     });
 
     test("keeps feature bonuses", () => {
-      const withTools = scoreProvider({ request: makeRequest({ tools: [{ type: "function" }] }), provider: makeProvider({ supportsTools: true }) });
-      const withoutTools = scoreProvider({ request: makeRequest({ tools: [{ type: "function" }] }), provider: makeProvider({ supportsTools: false }) });
+      const withTools = scoreProvider({
+        request: makeRequest({ tools: [{ type: "function" }] }),
+        provider: makeProvider({ supportsTools: true }),
+      });
+      const withoutTools = scoreProvider({
+        request: makeRequest({ tools: [{ type: "function" }] }),
+        provider: makeProvider({ supportsTools: false }),
+      });
 
       expect(withTools.score).toBeGreaterThan(withoutTools.score);
     });
 
     test("rewards reasoning support when request has reasoning_effort", () => {
-      const withReasoning = scoreProvider({ request: makeRequest({ reasoningEffort: "high" }), provider: makeProvider({ supportsReasoning: true }) });
-      const withoutReasoning = scoreProvider({ request: makeRequest({ reasoningEffort: "high" }), provider: makeProvider({ supportsReasoning: false }) });
+      const withReasoning = scoreProvider({
+        request: makeRequest({ reasoningEffort: "high" }),
+        provider: makeProvider({ supportsReasoning: true }),
+      });
+      const withoutReasoning = scoreProvider({
+        request: makeRequest({ reasoningEffort: "high" }),
+        provider: makeProvider({ supportsReasoning: false }),
+      });
 
       expect(withReasoning.score).toBeGreaterThan(withoutReasoning.score);
     });
@@ -148,7 +232,10 @@ describe("provider scoring", () => {
     test("quality mode prefers higher quality provider", () => {
       const highQuality = makeProvider({ id: "quality", qualityScore: 95, speedScore: 60 });
       const highSpeed = makeProvider({ id: "speed", qualityScore: 50, speedScore: 95 });
-      const ranked = rankProviderCandidates({ request: makeRequest({ mode: "quality" }), providers: [highSpeed, highQuality] });
+      const ranked = rankProviderCandidates({
+        request: makeRequest({ mode: "quality" }),
+        providers: [highSpeed, highQuality],
+      });
 
       expect(ranked[0]!.id).toBe("quality");
     });
@@ -192,9 +279,17 @@ describe("provider scoring", () => {
     });
 
     test("survival mode penalizes paid providers", () => {
-      const paid = makeProvider({ id: "paid", paidFallback: true, speedScore: 100, qualityScore: 100 });
+      const paid = makeProvider({
+        id: "paid",
+        paidFallback: true,
+        speedScore: 100,
+        qualityScore: 100,
+      });
       const free = makeProvider({ id: "free", speedScore: 50, qualityScore: 50 });
-      const ranked = rankProviderCandidates({ request: makeRequest({ mode: "survival" }), providers: [paid, free] });
+      const ranked = rankProviderCandidates({
+        request: makeRequest({ mode: "survival" }),
+        providers: [paid, free],
+      });
 
       expect(ranked[0]!.id).toBe("free");
     });

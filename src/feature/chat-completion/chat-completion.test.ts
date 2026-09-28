@@ -4,7 +4,16 @@ import type { ProviderAdapter } from "../../provider/provider-adapter";
 import type { OpenAIChatCompletionResponse } from "../../shared/signatures";
 import { loadProviderRegistry } from "../../config/provider-loader";
 import { normalizeRequest } from "../../router/request-normalizer";
-import { resetChatCompletionRoutingState, routeChatCompletion, RoutingError } from "./chat-completion.service";
+import { getStatsStoreRepository } from "../../storage/stats-store";
+import {
+  clearRoutingCooldowns,
+  configureChatCompletionLogging,
+  isChatCompletionLoggingEnabled,
+  resetChatCompletionRoutingState,
+  resetRoutingStats,
+  routeChatCompletion,
+  RoutingError,
+} from "./chat-completion.service";
 
 const SUCCESS_RESPONSE: OpenAIChatCompletionResponse = {
   id: "chatcmpl-test",
@@ -15,7 +24,9 @@ const SUCCESS_RESPONSE: OpenAIChatCompletionResponse = {
   usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
 };
 
-const REGISTRY_API_KEY_ENV_NAMES = [...new Set(loadProviderRegistry().providers.map((p) => p.apiKeyEnv))];
+const REGISTRY_API_KEY_ENV_NAMES = [
+  ...new Set(loadProviderRegistry().providers.map((p) => p.apiKeyEnv)),
+];
 const originalEnv: Record<string, string | undefined> = {};
 
 describe("chat completion feature", () => {
@@ -63,14 +74,25 @@ describe("chat completion feature", () => {
   test("normalizes text-only content parts to string content", () => {
     const routerRequest = normalizeRequest({
       model: "test-model",
-      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }, { type: "text", text: " world" }] }],
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Hello" },
+            { type: "text", text: " world" },
+          ],
+        },
+      ],
     });
 
     expect(routerRequest.messages).toEqual([{ role: "user", content: "Hello world" }]);
   });
 
   test("defaults stream to false when missing", () => {
-    const { stream } = normalizeRequest({ model: "test", messages: [{ role: "user", content: "hi" }] });
+    const { stream } = normalizeRequest({
+      model: "test",
+      messages: [{ role: "user", content: "hi" }],
+    });
 
     expect(stream).toBe(false);
   });
@@ -111,11 +133,14 @@ describe("chat completion feature", () => {
       },
     };
 
-    await routeChatCompletion({
-      model: "omnigate/auto-fast",
-      messages: [{ role: "user", content: "hi" }],
-      reasoning_effort: "high",
-    }, capturingAdapter);
+    await routeChatCompletion(
+      {
+        model: "omnigate/auto-fast",
+        messages: [{ role: "user", content: "hi" }],
+        reasoning_effort: "high",
+      },
+      capturingAdapter,
+    );
 
     expect(capturedReasoningEffort).toBe("high");
   });
@@ -124,20 +149,30 @@ describe("chat completion feature", () => {
     try {
       await routeChatCompletion({
         model: "omnigate/auto-fast",
-        messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/image.png" } }] }],
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "image_url", image_url: { url: "https://example.com/image.png" } }],
+          },
+        ],
       });
 
       expect.unreachable("should have thrown");
     } catch (error) {
       expect(error).toBeInstanceOf(RoutingError);
       expect((error as RoutingError).code).toBe("invalid_request");
-      expect((error as RoutingError).message).toContain("Only text message content parts are supported");
+      expect((error as RoutingError).message).toContain(
+        "Only text message content parts are supported",
+      );
     }
   });
 
   test("throws routing error for unknown model", async () => {
     try {
-      await routeChatCompletion({ model: "unknown/model", messages: [{ role: "user", content: "hi" }] });
+      await routeChatCompletion({
+        model: "unknown/model",
+        messages: [{ role: "user", content: "hi" }],
+      });
 
       expect.unreachable("should have thrown");
     } catch (error) {
@@ -148,10 +183,13 @@ describe("chat completion feature", () => {
 
   test("returns upstream JSON response through the best provider", async () => {
     const adapter = createMockAdapter({ json: SUCCESS_RESPONSE });
-    const result = await routeChatCompletion({
-      model: "omnigate/auto-fast",
-      messages: [{ role: "user", content: "hi" }],
-    }, adapter);
+    const result = await routeChatCompletion(
+      {
+        model: "omnigate/auto-fast",
+        messages: [{ role: "user", content: "hi" }],
+      },
+      adapter,
+    );
 
     expect(result.type).toBe("json");
     expect(result.response).toEqual(SUCCESS_RESPONSE);
@@ -164,19 +202,112 @@ describe("chat completion feature", () => {
         { status: 200, headers: {}, body: SUCCESS_RESPONSE },
       ],
     });
-    const result = await routeChatCompletion({
-      model: "omnigate/coding-auto",
-      messages: [{ role: "user", content: "hi" }],
-    }, adapter);
+    const result = await routeChatCompletion(
+      {
+        model: "omnigate/coding-auto",
+        messages: [{ role: "user", content: "hi" }],
+      },
+      adapter,
+    );
 
     expect(result.type).toBe("json");
     expect(result.response).toEqual(SUCCESS_RESPONSE);
   });
 });
 
+const ADMIN_TEST_NOW_MS = Date.UTC(2026, 0, 2, 3, 4, 5);
+const ADMIN_TEST_DAY = "2026-01-02";
+
+/** Service-level tests for routing admin operations. */
+describe("routing admin operations", () => {
+  beforeEach(() => {
+    resetChatCompletionRoutingState();
+  });
+
+  /** Should clear persisted cooldowns for all providers when no id is given. */
+  test("clears all routing cooldowns", () => {
+    const repository = getStatsStoreRepository();
+    const cooldownUntil = Date.now() + 60_000;
+
+    repository.recordProviderAttempt({
+      providerId: "admin_a",
+      modelFamily: "chat-fast",
+      status: "rate_limited",
+      cooldownUntil,
+      nowMs: ADMIN_TEST_NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: "admin_b",
+      modelFamily: "chat-fast",
+      status: "rate_limited",
+      cooldownUntil,
+      nowMs: ADMIN_TEST_NOW_MS,
+    });
+
+    expect(clearRoutingCooldowns()).toBe(2);
+    expect(repository.getCooldownUntil("admin_a", "chat-fast")).toBeUndefined();
+    expect(repository.getCooldownUntil("admin_b", "chat-fast")).toBeUndefined();
+  });
+
+  /** Should clear persisted cooldowns for one provider. */
+  test("clears one routing cooldown", () => {
+    const repository = getStatsStoreRepository();
+    const cooldownUntil = Date.now() + 60_000;
+
+    repository.recordProviderAttempt({
+      providerId: "admin_a",
+      modelFamily: "chat-fast",
+      status: "rate_limited",
+      cooldownUntil,
+      nowMs: ADMIN_TEST_NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: "admin_b",
+      modelFamily: "chat-fast",
+      status: "rate_limited",
+      cooldownUntil,
+      nowMs: ADMIN_TEST_NOW_MS,
+    });
+
+    expect(clearRoutingCooldowns("admin_a")).toBe(1);
+    expect(repository.getCooldownUntil("admin_a", "chat-fast")).toBeUndefined();
+    expect(repository.getCooldownUntil("admin_b", "chat-fast")).toBe(cooldownUntil);
+  });
+
+  /** Should delete one day of routing stats. */
+  test("resets routing stats for one day", () => {
+    const repository = getStatsStoreRepository();
+
+    repository.recordProviderAttempt({
+      providerId: "admin_a",
+      modelFamily: "chat-fast",
+      status: "success",
+      nowMs: ADMIN_TEST_NOW_MS,
+    });
+
+    expect(resetRoutingStats(ADMIN_TEST_DAY)).toBe(1);
+    expect(repository.listProviderStats(ADMIN_TEST_DAY)).toHaveLength(0);
+  });
+
+  /** Should reset body logging together with routing state. */
+  test("reset clears body logging", () => {
+    configureChatCompletionLogging(true);
+
+    resetChatCompletionRoutingState();
+
+    expect(isChatCompletionLoggingEnabled()).toBe(false);
+  });
+});
+
 type MockAdapterOptions =
   | { json: OpenAIChatCompletionResponse }
-  | { responses: Array<{ status: number; headers: Record<string, string>; body: Record<string, unknown> }> };
+  | {
+      responses: Array<{
+        status: number;
+        headers: Record<string, string>;
+        body: Record<string, unknown>;
+      }>;
+    };
 
 function createMockAdapter(options: MockAdapterOptions): ProviderAdapter {
   let callCount = 0;
@@ -191,7 +322,11 @@ function createMockAdapter(options: MockAdapterOptions): ProviderAdapter {
     }),
     send: async () => {
       if ("json" in options) {
-        return { status: 200, headers: {}, body: options.json as unknown as Record<string, unknown> };
+        return {
+          status: 200,
+          headers: {},
+          body: options.json as unknown as Record<string, unknown>,
+        };
       }
 
       const response = options.responses[callCount++];

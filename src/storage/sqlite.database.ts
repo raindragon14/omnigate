@@ -5,6 +5,9 @@ import { Database } from "bun:sqlite";
 const MEMORY_DATABASE_PATH = ":memory:";
 const PROVIDER_STATS_TABLE = "provider_stats";
 const TTFT_COLUMN = "avg_time_to_first_token_ms";
+const INPUT_TOKEN_COUNT_COLUMN = "input_token_count";
+const OUTPUT_TOKEN_COUNT_COLUMN = "output_token_count";
+const TOTAL_COST_USD_COLUMN = "total_cost_usd";
 const BUSY_TIMEOUT_MS = 5_000;
 
 type TableColumnRow = {
@@ -48,6 +51,9 @@ export function migrateSqliteDatabase(database: Database): void {
       day TEXT NOT NULL,
       request_count INTEGER NOT NULL DEFAULT 0,
       token_count INTEGER NOT NULL DEFAULT 0,
+      input_token_count INTEGER NOT NULL DEFAULT 0,
+      output_token_count INTEGER NOT NULL DEFAULT 0,
+      total_cost_usd REAL NOT NULL DEFAULT 0,
       success_count INTEGER NOT NULL DEFAULT 0,
       failure_count INTEGER NOT NULL DEFAULT 0,
       rate_limit_count INTEGER NOT NULL DEFAULT 0,
@@ -63,9 +69,32 @@ export function migrateSqliteDatabase(database: Database): void {
   `);
 
   ensureColumn(database, PROVIDER_STATS_TABLE, TTFT_COLUMN, `${TTFT_COLUMN} REAL`);
+  ensureColumn(
+    database,
+    PROVIDER_STATS_TABLE,
+    INPUT_TOKEN_COUNT_COLUMN,
+    `${INPUT_TOKEN_COUNT_COLUMN} INTEGER NOT NULL DEFAULT 0`,
+  );
+  ensureColumn(
+    database,
+    PROVIDER_STATS_TABLE,
+    OUTPUT_TOKEN_COUNT_COLUMN,
+    `${OUTPUT_TOKEN_COUNT_COLUMN} INTEGER NOT NULL DEFAULT 0`,
+  );
+  ensureColumn(
+    database,
+    PROVIDER_STATS_TABLE,
+    TOTAL_COST_USD_COLUMN,
+    `${TOTAL_COST_USD_COLUMN} REAL NOT NULL DEFAULT 0`,
+  );
 }
 
-function ensureColumn(database: Database, tableName: string, columnName: string, definition: string): void {
+function ensureColumn(
+  database: Database,
+  tableName: string,
+  columnName: string,
+  definition: string,
+): void {
   if (hasColumn(database, tableName, columnName)) {
     return;
   }

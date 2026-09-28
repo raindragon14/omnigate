@@ -7,6 +7,7 @@ const MAX_PORT = 65_535;
 const PORT_ENV_NAME = "PORT";
 const OMNIGATE_API_KEY_ENV_NAME = "OMNIGATE_API_KEY";
 const OMNIGATE_DB_PATH_ENV_NAME = "OMNIGATE_DB_PATH";
+const OMNIGATE_LOG_BODIES_ENV_NAME = "OMNIGATE_LOG_BODIES";
 
 /** Default SQLite path used when OMNIGATE_DB_PATH is not set. */
 export const DEFAULT_DATABASE_PATH = ".data/omnigate.sqlite";
@@ -32,6 +33,7 @@ export function parseAppConfig(environment: AppEnvironment): AppConfig {
     port: parsePort(environment[PORT_ENV_NAME]),
     omnigateApiKey: parseRequiredSecret(environment, OMNIGATE_API_KEY_ENV_NAME),
     databasePath: parseDatabasePath(environment[OMNIGATE_DB_PATH_ENV_NAME]),
+    logBodies: parseLogBodies(environment[OMNIGATE_LOG_BODIES_ENV_NAME]),
   };
 }
 
@@ -65,4 +67,14 @@ function parseDatabasePath(rawPath: string | undefined): string {
   }
 
   return rawPath.trim();
+}
+
+function parseLogBodies(rawValue: string | undefined): boolean {
+  if (rawValue === undefined) {
+    return false;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+
+  return normalized === "true" || normalized === "1";
 }

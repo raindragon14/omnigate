@@ -15,11 +15,13 @@ import { runProviderFallback, runProviderStreamFallback } from "../../router/fal
 import { createProviderCooldownStore } from "../../router/provider-cooldown";
 import { createOpenAiCompatibleAdapter } from "../../provider/openai-compatible-adapter";
 import type { ProviderAdapter } from "../../provider/provider-adapter";
-import { DEFAULT_DATABASE_PATH } from "../../config/config-loader";
 import { loadProviderRegistry, resolveApiKey } from "../../config/provider-loader";
-import { createProviderStatsRepository, formatStatsDay } from "../../storage/provider-stats.repository";
-import { createSqliteDatabase, migrateSqliteDatabase } from "../../storage/sqlite.database";
-import type { Database } from "bun:sqlite";
+import { formatStatsDay } from "../../storage/provider-stats.repository";
+import {
+  configureStatsStore,
+  getStatsStoreRepository,
+  resetStatsStore,
+} from "../../storage/stats-store";
 
 const NO_PROVIDER_CODE: ProviderErrorCategory = "no_provider_available";
 const INVALID_REQUEST_CODE: ProviderErrorCategory = "invalid_request";
@@ -28,21 +30,33 @@ const NO_PROVIDER_MESSAGE = "No available provider for this request";
 const INTERNAL_ERROR_MESSAGE = "Internal server error";
 
 let cooldownStore = createProviderCooldownStore();
-let cachedDatabase: Database | undefined;
-let cachedProviderStatsRepository: ProviderStatsRepository | undefined;
-let configuredDatabasePath = DEFAULT_DATABASE_PATH;
+let logBodiesEnabled = false;
 
 /**
- * Resets the module-level routing state (cooldown store and cached repository).
- * Intended for tests; not needed in normal production use.
+ * Resets the module-level routing state (cooldown store, cached repository,
+ * and body-logging flag). Intended for tests; not needed in normal production use.
  */
 export function resetChatCompletionRoutingState(): void {
   cooldownStore = createProviderCooldownStore();
-  if (cachedDatabase !== undefined) {
-    cachedDatabase.close();
-  }
-  cachedDatabase = undefined;
-  cachedProviderStatsRepository = undefined;
+  logBodiesEnabled = false;
+  resetStatsStore();
+}
+
+/**
+ * Enables or disables logging of chat-completion request/response bodies.
+ * Bodies are only logged when explicitly enabled (opt-in debugging).
+ * @param enabled  Whether body logging is enabled.
+ */
+export function configureChatCompletionLogging(enabled: boolean): void {
+  logBodiesEnabled = enabled;
+}
+
+/**
+ * Returns whether chat-completion body logging is enabled.
+ * @returns True when request/response bodies are logged.
+ */
+export function isChatCompletionLoggingEnabled(): boolean {
+  return logBodiesEnabled;
 }
 
 /**
@@ -52,17 +66,32 @@ export function resetChatCompletionRoutingState(): void {
  * @param databasePath  SQLite database path from AppConfig.
  */
 export function configureChatCompletionStorage(databasePath: string): void {
-  if (databasePath === configuredDatabasePath && cachedProviderStatsRepository !== undefined) {
-    return;
-  }
+  configureStatsStore(databasePath);
+}
 
-  if (cachedDatabase !== undefined) {
-    cachedDatabase.close();
-  }
+/**
+ * Clears routing cooldowns from the in-memory store and the persisted stats.
+ * @param providerId  Optional provider id; clears all providers when omitted.
+ * @returns The number of cooldown entries cleared (memory + persisted).
+ */
+export function clearRoutingCooldowns(providerId?: string): number {
+  const memoryCleared =
+    providerId === undefined
+      ? cooldownStore.clearAllCooldowns()
+      : cooldownStore.clearCooldown(providerId)
+        ? 1
+        : 0;
 
-  configuredDatabasePath = databasePath;
-  cachedDatabase = undefined;
-  cachedProviderStatsRepository = undefined;
+  return memoryCleared + getProviderStatsRepository().clearProviderCooldowns(providerId);
+}
+
+/**
+ * Deletes routing stats rows for one UTC day (today when omitted).
+ * @param day  Optional UTC day key (YYYY-MM-DD).
+ * @returns The number of rows deleted.
+ */
+export function resetRoutingStats(day: string = formatStatsDay(Date.now())): number {
+  return getProviderStatsRepository().resetProviderStats(day);
 }
 
 /**
@@ -152,9 +181,8 @@ export async function routeChatCompletion(
 
     return { type: "json", response: await runProviderFallback(fallbackInput) };
   } catch (error) {
-    const code = error instanceof Error && "code" in error
-      ? (error.code as ProviderErrorCategory)
-      : undefined;
+    const code =
+      error instanceof Error && "code" in error ? (error.code as ProviderErrorCategory) : undefined;
 
     throw new RoutingError(code ?? INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE);
   }
@@ -173,16 +201,7 @@ function normalizeRouterRequest(chatRequest: OpenAIChatRequest): RouterRequest {
 }
 
 function getProviderStatsRepository(): ProviderStatsRepository {
-  if (cachedProviderStatsRepository !== undefined) {
-    return cachedProviderStatsRepository;
-  }
-
-  const database = createSqliteDatabase(configuredDatabasePath);
-
-  migrateSqliteDatabase(database);
-  cachedDatabase = database;
-  cachedProviderStatsRepository = createProviderStatsRepository(database);
-  return cachedProviderStatsRepository;
+  return getStatsStoreRepository();
 }
 
 function syncPersistedCooldowns(

@@ -26,19 +26,23 @@ export declare const HTTP_STATUS_INTERNAL_SERVER_ERROR: 500;
 /** Route path for the chat completion endpoint. */
 export declare const ROUTE_PATH: "/v1/chat/completions";
 
+/** Response header carrying the per-request correlation id. */
+export declare const REQUEST_ID_HEADER_NAME: "x-request-id";
+
 /** Service operational status indicator. */
 export type ServiceStatus = "ok" | "degraded";
 
 /** Discriminated union returning either a value or an error. */
 export type Result<TValue, TError = AppError> =
-  | { isOk: true; value: TValue }
-  | { isOk: false; error: TError };
+  { isOk: true; value: TValue } | { isOk: false; error: TError };
 
 /** Application-level runtime configuration. */
 export interface AppConfig {
   port: number;
   omnigateApiKey: string;
   databasePath: string;
+  /** When true, chat-completion request/response bodies are logged (opt-in debugging). */
+  logBodies: boolean;
 }
 
 /** Response body for the GET /health endpoint. */
@@ -99,11 +103,20 @@ export declare function parseAppConfig(environment: Record<string, string | unde
 export declare function registerAppErrorHandler(app: Hono): void;
 
 /**
- * Registers Bearer-token authentication for OpenAI-compatible /v1 routes.
+ * Registers Bearer-token authentication for OpenAI-compatible /v1 routes and
+ * the operational /metrics endpoint.
  * @param app     The Hono application instance.
  * @param apiKey  The expected OmniGate API key.
  */
 export declare function registerApiKeyAuth(app: Hono, apiKey: string): void;
+
+/**
+ * Generates a unique correlation id for one incoming request.
+ * Returned to clients via the x-request-id response header; never used as a
+ * metric label.
+ * @returns A UUID v4 string.
+ */
+export declare function createRequestId(): string;
 
 /**
  * Registers the GET /health route.
@@ -170,10 +183,12 @@ export type ChatMessageTextContentPart = {
 };
 
 /** A content part in a chat message; text parts or unknown provider-specific parts. */
-export type ChatMessageContentPart = ChatMessageTextContentPart | {
-  type: string;
-  [key: string]: unknown;
-};
+export type ChatMessageContentPart =
+  | ChatMessageTextContentPart
+  | {
+      type: string;
+      [key: string]: unknown;
+    };
 
 /** A single message in an OpenAI-compatible chat conversation. */
 export type ChatMessage = {
@@ -232,6 +247,14 @@ export type ProviderRateLimit = {
   rpd?: number | undefined;
 };
 
+/** Upstream tariff for a single provider, in USD per 1M tokens. */
+export type ProviderCost = {
+  inputPer1m?: number | undefined;
+  outputPer1m?: number | undefined;
+  /** Tariff source (e.g. vendor pricing page or "public anonymous tier"). */
+  source?: string | undefined;
+};
+
 /** A single provider entry from the registry, ready for selection and routing. */
 export type ProviderCandidate = {
   id: string;
@@ -251,6 +274,8 @@ export type ProviderCandidate = {
   supportsReasoning: boolean;
   maxTokensField?: "max_tokens" | "max_completion_tokens" | undefined;
   rateLimit: ProviderRateLimit;
+  /** Upstream tariff; empty when unknown (cost is then recorded as unknown, not zero). */
+  cost: ProviderCost;
 };
 
 /** Configuration for a single model alias in the provider registry. */
@@ -274,10 +299,19 @@ export type AliasConfig = {
   tiebreak?: TiebreakMode | undefined;
 };
 
+/** Policy contract for one public alias (profile). Request-time enforcement is planned; quality gates are checked offline. */
+export type AliasProfile = {
+  /** Task categories this profile serves (see GLOSSARY task categories). */
+  categories: string[];
+  /** Minimum score ratio vs the single-best baseline, checked offline by eval:check. */
+  minQualityRatio?: number | undefined;
+};
+
 /** The complete provider registry loaded from provider.registry.yaml. */
 export type ProviderRegistry = {
   providers: ProviderCandidate[];
   aliases: Record<string, AliasConfig>;
+  profiles: Record<string, AliasProfile>;
 };
 
 /** Shape of the HTTP request sent to an upstream provider. */
@@ -312,6 +346,10 @@ export type ProviderStatsRecord = {
   day: string;
   requestCount: number;
   tokenCount: number;
+  inputTokenCount: number;
+  outputTokenCount: number;
+  /** Cumulative upstream cost in USD; only from attempts with known tariffs and usage. */
+  totalCostUsd: number;
   successCount: number;
   failureCount: number;
   rateLimitCount: number;
@@ -329,6 +367,10 @@ export type ProviderStatsUpdate = {
   /** End-to-end request latency. Optional for streaming, where only time-to-first-token is known. */
   latencyMs?: number | undefined;
   tokenCount?: number | undefined;
+  inputTokenCount?: number | undefined;
+  outputTokenCount?: number | undefined;
+  /** Upstream cost of this attempt in USD. Undefined when the tariff or usage is unknown. */
+  costUsd?: number | undefined;
   tokensPerSecond?: number | undefined;
   timeToFirstTokenMs?: number | undefined;
   cooldownUntil?: number | undefined;
@@ -337,9 +379,19 @@ export type ProviderStatsUpdate = {
 
 /** Repository for local provider routing signals. */
 export interface ProviderStatsRepository {
-  getProviderStats(providerId: string, modelFamily: string, day: string): ProviderStatsRecord | undefined;
+  getProviderStats(
+    providerId: string,
+    modelFamily: string,
+    day: string,
+  ): ProviderStatsRecord | undefined;
+  /** Lists all provider stats rows for one UTC day, ordered by provider and family. */
+  listProviderStats(day: string): ProviderStatsRecord[];
   recordProviderAttempt(update: ProviderStatsUpdate): void;
   getCooldownUntil(providerId: string, modelFamily: string): number | undefined;
+  /** Clears persisted cooldowns (one provider or all). Returns rows changed. */
+  clearProviderCooldowns(providerId?: string): number;
+  /** Deletes all stats rows for one UTC day. Returns rows deleted. */
+  resetProviderStats(day: string): number;
 }
 
 /**
@@ -368,6 +420,26 @@ export declare function createProviderStatsRepository(database: Database): Provi
  * @returns A YYYY-MM-DD UTC day string.
  */
 export declare function formatStatsDay(nowMs: number): string;
+
+/**
+ * Points the shared stats store at a SQLite database path, closing any
+ * previously opened database. Used by every feature that reads routing stats.
+ * @param databasePath  SQLite database path from AppConfig.
+ */
+export declare function configureStatsStore(databasePath: string): void;
+
+/**
+ * Returns the shared provider stats repository, opening and migrating the
+ * configured database on first use.
+ * @returns The shared ProviderStatsRepository instance.
+ */
+export declare function getStatsStoreRepository(): ProviderStatsRepository;
+
+/**
+ * Closes the shared stats database and drops cached handles.
+ * Intended for tests; not needed in normal production use.
+ */
+export declare function resetStatsStore(): void;
 
 /** A standard OpenAI-compatible chat completion response. */
 export type OpenAIChatCompletionResponse = {
@@ -447,11 +519,103 @@ export declare function registerChatCompletionRoute(app: Hono): void;
 export declare function configureChatCompletionStorage(databasePath: string): void;
 
 /**
+ * Enables or disables logging of chat-completion request/response bodies.
+ * Bodies are only logged when explicitly enabled (opt-in debugging).
+ * @param enabled  Whether body logging is enabled.
+ */
+export declare function configureChatCompletionLogging(enabled: boolean): void;
+
+/**
+ * Returns whether chat-completion body logging is enabled.
+ * @returns True when request/response bodies are logged.
+ */
+export declare function isChatCompletionLoggingEnabled(): boolean;
+
+/**
+ * Clears routing cooldowns from the in-memory store and the persisted stats.
+ * @param providerId  Optional provider id; clears all providers when omitted.
+ * @returns The number of cooldown entries cleared (memory + persisted).
+ */
+export declare function clearRoutingCooldowns(providerId?: string): number;
+
+/**
+ * Deletes routing stats rows for one UTC day (today when omitted).
+ * @param day  Optional UTC day key (YYYY-MM-DD).
+ * @returns The number of rows deleted.
+ */
+export declare function resetRoutingStats(day?: string): number;
+
+/**
  * Routes a chat completion request through the best available provider.
  * @param chatRequest  The validated OpenAI-compatible chat request.
  * @returns A JSON completion result or streaming SSE pass-through result.
  */
-export declare function routeChatCompletion(chatRequest: OpenAIChatRequest): Promise<ChatCompletionRouteResult>;
+export declare function routeChatCompletion(
+  chatRequest: OpenAIChatRequest,
+): Promise<ChatCompletionRouteResult>;
+
+/** One provider stats row in API (snake_case) shape. */
+export type ProviderStatsSnapshot = {
+  provider_id: string;
+  model_family: string;
+  day: string;
+  request_count: number;
+  token_count: number;
+  input_token_count: number;
+  output_token_count: number;
+  total_cost_usd: number;
+  success_count: number;
+  failure_count: number;
+  rate_limit_count: number;
+  avg_latency_ms: number | null;
+  avg_tokens_per_second: number | null;
+  avg_time_to_first_token_ms: number | null;
+  cooldown_until: number | null;
+};
+
+/** Stats snapshot response for GET /v1/stats. */
+export type StatsSnapshotResponse = {
+  day: string;
+  data: ProviderStatsSnapshot[];
+};
+
+/**
+ * Returns today's routing stats snapshot (or one UTC day when given).
+ * @param day  Optional UTC day key (YYYY-MM-DD); defaults to today.
+ * @returns Snapshot with the UTC day and its provider rows.
+ */
+export declare function getStatsSnapshot(day?: string): StatsSnapshotResponse;
+
+/**
+ * Formats provider stats rows as Prometheus text exposition format.
+ * Only request_id-free, bounded-cardinality labels are used
+ * (provider_id, model_family).
+ * @param records  Provider stats rows to expose.
+ * @param day      UTC day the rows cover, exposed as a scrape annotation.
+ * @returns Metrics text with `text/plain; version=0.0.4` semantics.
+ */
+export declare function formatPrometheusMetrics(
+  records: ProviderStatsRecord[],
+  day: string,
+): string;
+
+/**
+ * Returns Prometheus metrics for today's routing stats.
+ * @returns Metrics exposition text for GET /metrics.
+ */
+export declare function getPrometheusMetrics(): string;
+
+/**
+ * Registers the GET /metrics route on the given Hono application.
+ * @param app  The Hono application instance.
+ */
+export declare function registerMetricsRoute(app: Hono): void;
+
+/**
+ * Registers the admin routes (GET /v1/stats, POST /v1/admin/*).
+ * @param app  The Hono application instance.
+ */
+export declare function registerAdminRoutes(app: Hono): void;
 
 // ---------------------------------------------------------------------------
 // Provider adapters
@@ -464,7 +628,11 @@ export interface ProviderAdapter {
   /** Returns true when this adapter can handle the given request through the given provider. */
   supports(request: RouterRequest, provider: ProviderCandidate): boolean;
   /** Converts a normalised RouterRequest into a provider-specific HTTP request. */
-  transformRequest(request: RouterRequest, provider: ProviderCandidate, apiKey: string): ProviderRequest;
+  transformRequest(
+    request: RouterRequest,
+    provider: ProviderCandidate,
+    apiKey: string,
+  ): ProviderRequest;
   /** Sends the provider request over HTTP and returns the raw response. */
   send(request: ProviderRequest): Promise<ProviderResponse>;
   /** Sends the provider request over HTTP and returns an unconsumed stream response. */
@@ -542,7 +710,9 @@ export type ProviderSelectionInput = {
  * @param input  Selection parameters.
  * @returns An array of eligible ProviderCandidate values (empty when none match).
  */
-export declare function selectProviderCandidates(input: ProviderSelectionInput): ProviderCandidate[];
+export declare function selectProviderCandidates(
+  input: ProviderSelectionInput,
+): ProviderCandidate[];
 
 /** Score for a single provider candidate. */
 export type ProviderScore = {
@@ -590,6 +760,10 @@ export interface ProviderCooldownStore {
   getCooldownUntil(providerId: string): number | undefined;
   /** Sets a cooldown expiration timestamp (ms) for a provider. */
   setCooldown(providerId: string, cooldownUntilMs: number): void;
+  /** Removes one provider cooldown. Returns true when an entry was removed. */
+  clearCooldown(providerId: string): boolean;
+  /** Removes all cooldowns. Returns the number of entries removed. */
+  clearAllCooldowns(): number;
   /** Returns true when the provider is still cooling down at the given time. */
   isProviderCoolingDown(providerId: string, nowMs: number): boolean;
 }
@@ -607,7 +781,10 @@ export declare function createProviderCooldownStore(): ProviderCooldownStore;
  * @param nowMs      Current time in milliseconds.
  * @returns Milliseconds from now to wait, or undefined when unparseable.
  */
-export declare function parseRetryAfterMs(rawHeader: string | undefined, nowMs: number): number | undefined;
+export declare function parseRetryAfterMs(
+  rawHeader: string | undefined,
+  nowMs: number,
+): number | undefined;
 
 /** Input for running the fallback loop. */
 export type FallbackRunnerInput = {
@@ -621,6 +798,18 @@ export type FallbackRunnerInput = {
 };
 
 /**
+ * Computes the upstream cost of one successful attempt in USD from the
+ * provider tariff and the upstream usage block.
+ * @param provider  Provider candidate carrying the tariff (USD per 1M tokens).
+ * @param usage     Upstream usage block with prompt/completion token counts.
+ * @returns The attempt cost in USD, or undefined when the tariff or usage is unknown.
+ */
+export declare function calculateAttemptCost(
+  provider: ProviderCandidate,
+  usage: OpenAIChatCompletionResponse["usage"],
+): number | undefined;
+
+/**
  * Routes the request through the ranked provider list, attempting fallback
  * on rate-limited, timeout, server-error, network-error, and malformed-response
  * failures.  On rate-limit, sets cooldown.
@@ -628,7 +817,9 @@ export type FallbackRunnerInput = {
  * @returns The first successful OpenAI-compatible response.
  * @throws {RoutingError} When all providers fail.
  */
-export declare function runProviderFallback(input: FallbackRunnerInput): Promise<OpenAIChatCompletionResponse>;
+export declare function runProviderFallback(
+  input: FallbackRunnerInput,
+): Promise<OpenAIChatCompletionResponse>;
 
 /**
  * Routes a streaming request through providers, falling back only before a
@@ -637,7 +828,9 @@ export declare function runProviderFallback(input: FallbackRunnerInput): Promise
  * @returns The first successful streaming response.
  * @throws {RoutingError} When all providers fail before streaming starts.
  */
-export declare function runProviderStreamFallback(input: FallbackRunnerInput): Promise<OpenAIChatStreamResponse>;
+export declare function runProviderStreamFallback(
+  input: FallbackRunnerInput,
+): Promise<OpenAIChatStreamResponse>;
 
 /**
  * Classifies a provider HTTP response or error into a ProviderErrorCategory.
@@ -674,3 +867,31 @@ export declare function listModelController(context: Context): Response;
  * @returns A JSON Response containing either the completion or an error shape.
  */
 export declare function handleChatCompletion(context: Context): Promise<Response>;
+
+/**
+ * Handles GET /metrics requests.
+ * @param context  Hono request context.
+ * @returns A text Response with Prometheus exposition format metrics.
+ */
+export declare function getMetricsController(context: Context): Response;
+
+/**
+ * Handles GET /v1/stats requests.
+ * @param context  Hono request context.
+ * @returns A JSON Response with the UTC day and its provider rows.
+ */
+export declare function getStatsController(context: Context): Response;
+
+/**
+ * Handles POST /v1/admin/cooldowns/clear requests.
+ * @param context  Hono request context.
+ * @returns A JSON Response with the number of entries cleared.
+ */
+export declare function handleClearCooldowns(context: Context): Promise<Response>;
+
+/**
+ * Handles POST /v1/admin/stats/reset requests.
+ * @param context  Hono request context.
+ * @returns A JSON Response with the day and the number of rows deleted.
+ */
+export declare function handleResetStats(context: Context): Promise<Response>;

@@ -21,7 +21,9 @@ describe("config loader", () => {
 
   /** Should use the port value provided in the environment. */
   test("uses configured port", () => {
-    expect(parseAppConfig({ PORT: CONFIGURED_PORT_ENV, OMNIGATE_API_KEY }).port).toBe(EXPECTED_CONFIGURED_PORT);
+    expect(parseAppConfig({ PORT: CONFIGURED_PORT_ENV, OMNIGATE_API_KEY }).port).toBe(
+      EXPECTED_CONFIGURED_PORT,
+    );
   });
 
   /** Should read the OmniGate API key from the environment. */
@@ -32,13 +34,34 @@ describe("config loader", () => {
   /** Should fall back to the default database path when OMNIGATE_DB_PATH is missing or blank. */
   test("uses default database path", () => {
     expect(parseAppConfig({ OMNIGATE_API_KEY }).databasePath).toBe(DEFAULT_DATABASE_PATH);
-    expect(parseAppConfig({ OMNIGATE_API_KEY, OMNIGATE_DB_PATH: " " }).databasePath).toBe(DEFAULT_DATABASE_PATH);
+    expect(parseAppConfig({ OMNIGATE_API_KEY, OMNIGATE_DB_PATH: " " }).databasePath).toBe(
+      DEFAULT_DATABASE_PATH,
+    );
   });
 
   /** Should use the configured SQLite database path. */
   test("uses configured database path", () => {
-    expect(parseAppConfig({ OMNIGATE_API_KEY, OMNIGATE_DB_PATH: CONFIGURED_DATABASE_PATH }).databasePath)
-      .toBe(CONFIGURED_DATABASE_PATH);
+    expect(
+      parseAppConfig({ OMNIGATE_API_KEY, OMNIGATE_DB_PATH: CONFIGURED_DATABASE_PATH }).databasePath,
+    ).toBe(CONFIGURED_DATABASE_PATH);
+  });
+
+  /** Should default body logging to disabled. */
+  test("disables body logging by default", () => {
+    expect(parseAppConfig({ OMNIGATE_API_KEY }).logBodies).toBe(false);
+    expect(parseAppConfig({ OMNIGATE_API_KEY, OMNIGATE_LOG_BODIES: "" }).logBodies).toBe(false);
+    expect(parseAppConfig({ OMNIGATE_API_KEY, OMNIGATE_LOG_BODIES: "false" }).logBodies).toBe(
+      false,
+    );
+  });
+
+  /** Should enable body logging only for explicit truthy values. */
+  test("enables body logging when configured", () => {
+    expect(parseAppConfig({ OMNIGATE_API_KEY, OMNIGATE_LOG_BODIES: "true" }).logBodies).toBe(true);
+    expect(parseAppConfig({ OMNIGATE_API_KEY, OMNIGATE_LOG_BODIES: "1" }).logBodies).toBe(true);
+    expect(parseAppConfig({ OMNIGATE_API_KEY, OMNIGATE_LOG_BODIES: " True " }).logBodies).toBe(
+      true,
+    );
   });
 
   /** Should throw when OMNIGATE_API_KEY is missing or blank. */
@@ -49,12 +72,18 @@ describe("config loader", () => {
 
   /** Should throw when PORT is a non-numeric string. */
   test("rejects non-numeric port", () => {
-    expect(() => parseAppConfig({ PORT: INVALID_NON_NUMERIC_PORT, OMNIGATE_API_KEY })).toThrow(INVALID_PORT_MESSAGE);
+    expect(() => parseAppConfig({ PORT: INVALID_NON_NUMERIC_PORT, OMNIGATE_API_KEY })).toThrow(
+      INVALID_PORT_MESSAGE,
+    );
   });
 
   /** Should throw when PORT is outside the valid 1-65535 range. */
   test("rejects port outside valid range", () => {
-    expect(() => parseAppConfig({ PORT: INVALID_LOW_PORT, OMNIGATE_API_KEY })).toThrow(INVALID_PORT_MESSAGE);
-    expect(() => parseAppConfig({ PORT: INVALID_HIGH_PORT, OMNIGATE_API_KEY })).toThrow(INVALID_PORT_MESSAGE);
+    expect(() => parseAppConfig({ PORT: INVALID_LOW_PORT, OMNIGATE_API_KEY })).toThrow(
+      INVALID_PORT_MESSAGE,
+    );
+    expect(() => parseAppConfig({ PORT: INVALID_HIGH_PORT, OMNIGATE_API_KEY })).toThrow(
+      INVALID_PORT_MESSAGE,
+    );
   });
 });

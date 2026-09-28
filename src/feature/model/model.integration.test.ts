@@ -14,7 +14,12 @@ const EXPECTED_MODEL_IDS = [
 ];
 const TEST_OMNIGATE_API_KEY = "test-omnigate-key";
 const AUTHORIZATION_HEADER = `Bearer ${TEST_OMNIGATE_API_KEY}`;
-const TEST_APP_CONFIG = { port: DEFAULT_PORT, omnigateApiKey: TEST_OMNIGATE_API_KEY, databasePath: ":memory:" };
+const TEST_APP_CONFIG = {
+  port: DEFAULT_PORT,
+  omnigateApiKey: TEST_OMNIGATE_API_KEY,
+  databasePath: ":memory:",
+  logBodies: false,
+};
 
 /** Integration tests for the GET /v1/models endpoint. */
 describe("model integration", () => {

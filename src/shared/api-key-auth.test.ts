@@ -6,7 +6,12 @@ import { DEFAULT_PORT } from "../config/config-loader";
 import { HTTP_STATUS_OK, HTTP_STATUS_UNAUTHORIZED } from "./http-status";
 
 const TEST_API_KEY = "test-api-key-1234567890abcdef";
-const TEST_APP_CONFIG = { port: DEFAULT_PORT, omnigateApiKey: TEST_API_KEY, databasePath: ":memory:" };
+const TEST_APP_CONFIG = {
+  port: DEFAULT_PORT,
+  omnigateApiKey: TEST_API_KEY,
+  databasePath: ":memory:",
+  logBodies: false,
+};
 
 /** Unit tests for Bearer-token authentication middleware. */
 describe("api key auth", () => {

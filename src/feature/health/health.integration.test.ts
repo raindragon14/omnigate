@@ -5,7 +5,12 @@ import { DEFAULT_PORT } from "../../config/config-loader";
 import { HTTP_STATUS_OK } from "../../shared/http-status";
 
 const HEALTH_ROUTE_PATH = "/health";
-const TEST_APP_CONFIG = { port: DEFAULT_PORT, omnigateApiKey: "test-omnigate-key", databasePath: ":memory:" };
+const TEST_APP_CONFIG = {
+  port: DEFAULT_PORT,
+  omnigateApiKey: "test-omnigate-key",
+  databasePath: ":memory:",
+  logBodies: false,
+};
 const EXPECTED_HEALTH_RESPONSE = {
   status: "ok",
   service: "omnigate",

@@ -13,6 +13,14 @@
 #   speed_score   0-100, used by the speed routing mode
 #   enabled       set to false to exclude without removing the entry
 #   rate_limit    optional {rpm, rph, rpd} for quota-pressure scoring
+#   cost          optional {input_per_1m, output_per_1m} upstream tariff in
+#                 USD per 1M tokens, plus an optional `source` naming where the
+#                 tariff came from. Omit when unknown: attempts are then recorded
+#                 with unknown (not zero) cost. Example:
+#                   cost:
+#                     input_per_1m: 0.15
+#                     output_per_1m: 0.60
+#                     source: "vendor pricing page, retrieved 2026-09-01"
 #   supports_*    optional feature flags used for request matching
 #                 (supports_reasoning gates reasoning_effort requests)
 #   max_tokens_field  optional max_tokens | max_completion_tokens body key
@@ -61,6 +69,10 @@ providers:
     supports_tools: false
     supports_json: true
     supports_streaming: true
+    cost:
+      input_per_1m: 0
+      output_per_1m: 0
+      source: "public anonymous tier (no billing)"
 
 aliases:
   omnigate/auto-fast:
@@ -75,3 +87,16 @@ aliases:
       speed: 5
       quality: 0.5
     tiebreak: speed
+
+# Policy contracts per alias (E5). Categories come from GLOSSARY task
+# categories; min_quality_ratio is checked offline by `bun run eval:check`
+# against saved eval results — never enforced at request time yet.
+profiles:
+  omnigate/auto-fast:
+    categories: ["knowledge", "chat"]
+  omnigate/auto-quality:
+    categories: ["knowledge", "writing"]
+  omnigate/coding-auto:
+    categories: ["coding"]
+  omnigate/coding-fast:
+    categories: ["coding"]

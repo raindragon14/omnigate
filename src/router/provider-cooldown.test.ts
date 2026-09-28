@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { computeCooldownUntil, createProviderCooldownStore, parseRetryAfterMs } from "./provider-cooldown";
+import {
+  computeCooldownUntil,
+  createProviderCooldownStore,
+  parseRetryAfterMs,
+} from "./provider-cooldown";
 
 const NOW_MS = 1_000_000;
 
@@ -84,6 +88,40 @@ describe("provider cooldown", () => {
       const result = computeCooldownUntil({}, NOW_MS);
 
       expect(result).toBe(NOW_MS + 60_000);
+    });
+  });
+
+  describe("clearCooldown", () => {
+    test("removes one provider cooldown", () => {
+      const store = createProviderCooldownStore();
+      const nowMs = Date.now();
+
+      store.setCooldown("alpha", nowMs + 60_000);
+      store.setCooldown("beta", nowMs + 60_000);
+
+      expect(store.clearCooldown("alpha")).toBe(true);
+      expect(store.isProviderCoolingDown("alpha", nowMs)).toBe(false);
+      expect(store.isProviderCoolingDown("beta", nowMs)).toBe(true);
+    });
+
+    test("returns false when no cooldown exists", () => {
+      const store = createProviderCooldownStore();
+
+      expect(store.clearCooldown("missing")).toBe(false);
+    });
+  });
+
+  describe("clearAllCooldowns", () => {
+    test("removes every cooldown and returns the count", () => {
+      const store = createProviderCooldownStore();
+      const nowMs = Date.now();
+
+      store.setCooldown("alpha", nowMs + 60_000);
+      store.setCooldown("beta", nowMs + 60_000);
+
+      expect(store.clearAllCooldowns()).toBe(2);
+      expect(store.isProviderCoolingDown("alpha", nowMs)).toBe(false);
+      expect(store.isProviderCoolingDown("beta", nowMs)).toBe(false);
     });
   });
 });

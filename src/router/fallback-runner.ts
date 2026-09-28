@@ -22,6 +22,7 @@ const MALFORMED_RESPONSE_CODE: ProviderErrorCategory = "provider_malformed_respo
 const NO_PROVIDER_MESSAGE = "No available provider for this request";
 const ALL_PROVIDERS_FAILED_MESSAGE = "All providers failed to handle this request";
 const MILLISECONDS_PER_SECOND = 1_000;
+const TOKENS_PER_MILLION = 1_000_000;
 
 /**
  * Classifies a provider HTTP response or error into a ProviderErrorCategory.
@@ -29,7 +30,10 @@ const MILLISECONDS_PER_SECOND = 1_000;
  * @param error     The caught error, if any.
  * @returns The classified error category.
  */
-export function classifyProviderError(response: ProviderResponse | undefined, error: unknown): ProviderErrorCategory {
+export function classifyProviderError(
+  response: ProviderResponse | undefined,
+  error: unknown,
+): ProviderErrorCategory {
   if (error instanceof DOMException && error.name === "AbortError") {
     return TIMEOUT_CODE;
   }
@@ -68,6 +72,34 @@ export function classifyProviderError(response: ProviderResponse | undefined, er
 }
 
 /**
+ * Computes the upstream cost of one successful attempt in USD from the
+ * provider tariff and the upstream usage block.
+ * @param provider  Provider candidate carrying the tariff (USD per 1M tokens).
+ * @param usage     Upstream usage block with prompt/completion token counts.
+ * @returns The attempt cost in USD, or undefined when the tariff or usage is unknown.
+ */
+export function calculateAttemptCost(
+  provider: ProviderCandidate,
+  usage: OpenAIChatCompletionResponse["usage"],
+): number | undefined {
+  if (usage === undefined) {
+    return undefined;
+  }
+
+  const { inputPer1m, outputPer1m } = provider.cost;
+
+  if (inputPer1m === undefined && outputPer1m === undefined) {
+    return undefined;
+  }
+
+  return (
+    ((usage.prompt_tokens ?? 0) * (inputPer1m ?? 0) +
+      (usage.completion_tokens ?? 0) * (outputPer1m ?? 0)) /
+    TOKENS_PER_MILLION
+  );
+}
+
+/**
  * Routes the request through the ranked provider list, attempting fallback
  * on rate-limited, timeout, server-error, network-error, and malformed-response
  * failures. On rate-limit, sets cooldown. Stops fallback on client errors (4xx
@@ -76,7 +108,9 @@ export function classifyProviderError(response: ProviderResponse | undefined, er
  * @returns The first successful OpenAI-compatible response.
  * @throws Error when all providers fail.
  */
-export async function runProviderFallback(input: FallbackRunnerInput): Promise<OpenAIChatCompletionResponse> {
+export async function runProviderFallback(
+  input: FallbackRunnerInput,
+): Promise<OpenAIChatCompletionResponse> {
   const { providers } = input;
 
   if (providers.length === 0) {
@@ -112,7 +146,10 @@ export async function runProviderFallback(input: FallbackRunnerInput): Promise<O
         continue;
       }
 
-      throw createProviderError(category, error instanceof Error ? error.message : ALL_PROVIDERS_FAILED_MESSAGE);
+      throw createProviderError(
+        category,
+        error instanceof Error ? error.message : ALL_PROVIDERS_FAILED_MESSAGE,
+      );
     }
   }
 
@@ -126,7 +163,9 @@ export async function runProviderFallback(input: FallbackRunnerInput): Promise<O
  * @returns The first successful streaming response.
  * @throws Error when all providers fail before streaming starts.
  */
-export async function runProviderStreamFallback(input: FallbackRunnerInput): Promise<OpenAIChatStreamResponse> {
+export async function runProviderStreamFallback(
+  input: FallbackRunnerInput,
+): Promise<OpenAIChatStreamResponse> {
   if (input.providers.length === 0) {
     throw createProviderError(NO_PROVIDER_CODE, NO_PROVIDER_MESSAGE);
   }
@@ -194,7 +233,10 @@ function shouldAttemptProvider(
   return hasProviderApiKey(provider, input.resolveApiKey);
 }
 
-async function attemptProvider(provider: ProviderCandidate, input: FallbackRunnerInput): Promise<ProviderAttemptResult> {
+async function attemptProvider(
+  provider: ProviderCandidate,
+  input: FallbackRunnerInput,
+): Promise<ProviderAttemptResult> {
   const startedAtMs = input.nowMs();
   const apiKey = input.resolveApiKey(provider.apiKeyEnv) ?? "";
   const providerRequest = input.adapter.transformRequest(input.request, provider, apiKey);
@@ -203,7 +245,12 @@ async function attemptProvider(provider: ProviderCandidate, input: FallbackRunne
   try {
     providerResponse = await input.adapter.send(providerRequest);
   } catch (error) {
-    recordProviderStats(input, provider, classifyProviderError(undefined, error), elapsedMs(input, startedAtMs));
+    recordProviderStats(
+      input,
+      provider,
+      classifyProviderError(undefined, error),
+      elapsedMs(input, startedAtMs),
+    );
     throw error;
   }
 
@@ -215,9 +262,10 @@ async function attemptProvider(provider: ProviderCandidate, input: FallbackRunne
   }
 
   const category = classifyProviderError(providerResponse, undefined);
-  const cooldownUntil = category === RATE_LIMITED_CODE
-    ? setProviderCooldownFromHeaders(provider, providerResponse.headers, input)
-    : undefined;
+  const cooldownUntil =
+    category === RATE_LIMITED_CODE
+      ? setProviderCooldownFromHeaders(provider, providerResponse.headers, input)
+      : undefined;
 
   recordProviderStats(input, provider, category, latencyMs, undefined, cooldownUntil);
 
@@ -235,15 +283,19 @@ async function attemptStreamProvider(
   const latencyMs = elapsedMs(input, startedAtMs);
 
   if (isSuccessfulStreamResponse(providerResponse)) {
-    return { response: createStreamResponse(providerResponse, provider, input, startedAtMs), category: NO_PROVIDER_CODE };
+    return {
+      response: createStreamResponse(providerResponse, provider, input, startedAtMs),
+      category: NO_PROVIDER_CODE,
+    };
   }
 
   await consumeResponseBody(providerResponse);
 
   const category = classifyStreamProviderError(providerResponse);
-  const cooldownUntil = category === RATE_LIMITED_CODE
-    ? setProviderCooldownFromHeaders(provider, providerResponse.headers, input)
-    : undefined;
+  const cooldownUntil =
+    category === RATE_LIMITED_CODE
+      ? setProviderCooldownFromHeaders(provider, providerResponse.headers, input)
+      : undefined;
 
   recordProviderStats(input, provider, category, latencyMs, undefined, cooldownUntil);
   return { category };
@@ -285,6 +337,9 @@ function recordProviderStats(
       status: toAttemptStatus(category),
       latencyMs,
       tokenCount: response?.usage?.total_tokens,
+      inputTokenCount: response?.usage?.prompt_tokens,
+      outputTokenCount: response?.usage?.completion_tokens,
+      costUsd: calculateAttemptCost(provider, response?.usage),
       tokensPerSecond: calculateTokensPerSecond(response, latencyMs),
       timeToFirstTokenMs,
       cooldownUntil,
@@ -302,45 +357,69 @@ function createStreamResponse(
   startedAtMs: number,
 ): OpenAIChatStreamResponse {
   return {
-    stream: trackFirstStreamChunk(response.stream, () => recordStreamSuccess(input, provider, startedAtMs)),
+    stream: trackFirstStreamChunk(response.stream, () =>
+      recordStreamSuccess(input, provider, startedAtMs),
+    ),
     headers: response.headers,
   };
 }
 
-function trackFirstStreamChunk(stream: ReadableStream<Uint8Array>, onFirstChunk: () => void): ReadableStream<Uint8Array> {
+function trackFirstStreamChunk(
+  stream: ReadableStream<Uint8Array>,
+  onFirstChunk: () => void,
+): ReadableStream<Uint8Array> {
   let hasFirstChunk = false;
 
-  return stream.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      if (!hasFirstChunk) {
-        hasFirstChunk = true;
-        onFirstChunk();
-      }
+  return stream.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        if (!hasFirstChunk) {
+          hasFirstChunk = true;
+          onFirstChunk();
+        }
 
-      controller.enqueue(chunk);
-    },
-  }));
+        controller.enqueue(chunk);
+      },
+    }),
+  );
 }
 
-function recordStreamSuccess(input: FallbackRunnerInput, provider: ProviderCandidate, startedAtMs: number): void {
+function recordStreamSuccess(
+  input: FallbackRunnerInput,
+  provider: ProviderCandidate,
+  startedAtMs: number,
+): void {
   const timeToFirstTokenMs = elapsedMs(input, startedAtMs);
 
   // Streaming only gives us time-to-first-token; end-to-end latency is unknown
   // until the client consumes the full stream, so we record TTFT on its own.
-  recordProviderStats(input, provider, NO_PROVIDER_CODE, undefined, undefined, undefined, timeToFirstTokenMs);
+  recordProviderStats(
+    input,
+    provider,
+    NO_PROVIDER_CODE,
+    undefined,
+    undefined,
+    undefined,
+    timeToFirstTokenMs,
+  );
 }
 
-function isSuccessfulStreamResponse(response: ProviderStreamResponse): response is ProviderStreamResponse & { stream: ReadableStream<Uint8Array> } {
+function isSuccessfulStreamResponse(
+  response: ProviderStreamResponse,
+): response is ProviderStreamResponse & { stream: ReadableStream<Uint8Array> } {
   return response.status === 200 && response.stream !== undefined;
 }
 
 function classifyStreamProviderError(response: ProviderStreamResponse): ProviderErrorCategory {
-  return classifyProviderError({
-    status: response.status,
-    body: {},
-    headers: response.headers,
-    isMalformed: response.status === 200 && response.stream === undefined,
-  }, undefined);
+  return classifyProviderError(
+    {
+      status: response.status,
+      body: {},
+      headers: response.headers,
+      isMalformed: response.status === 200 && response.stream === undefined,
+    },
+    undefined,
+  );
 }
 
 function toAttemptStatus(category: ProviderErrorCategory): ProviderAttemptStatus {
@@ -382,14 +461,19 @@ function isFallbackWorthy(category: ProviderErrorCategory): boolean {
   );
 }
 
-function createProviderError(code: ProviderErrorCategory, message: string): Error & { code: ProviderErrorCategory } {
+function createProviderError(
+  code: ProviderErrorCategory,
+  message: string,
+): Error & { code: ProviderErrorCategory } {
   const error = new Error(message) as Error & { code: ProviderErrorCategory };
 
   error.code = code;
   return error;
 }
 
-function isOpenAiChatCompletionResponse(body: Record<string, unknown>): body is OpenAIChatCompletionResponse {
+function isOpenAiChatCompletionResponse(
+  body: Record<string, unknown>,
+): body is OpenAIChatCompletionResponse {
   return (
     typeof body.id === "string" &&
     typeof body.object === "string" &&

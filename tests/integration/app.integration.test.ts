@@ -9,7 +9,12 @@ import {
 
 const UNKNOWN_ROUTE_PATH = "/unknown-route";
 const THROW_ROUTE_PATH = "/throw";
-const TEST_APP_CONFIG = { port: DEFAULT_PORT, omnigateApiKey: "test-omnigate-key", databasePath: ":memory:" };
+const TEST_APP_CONFIG = {
+  port: DEFAULT_PORT,
+  omnigateApiKey: "test-omnigate-key",
+  databasePath: ":memory:",
+  logBodies: false,
+};
 const UNEXPECTED_FAILURE_MESSAGE = "Unexpected failure";
 const NOT_FOUND_ERROR_RESPONSE = {
   error: {
@@ -49,5 +54,24 @@ describe("app integration", () => {
 
     expect(response.status).toBe(HTTP_STATUS_INTERNAL_SERVER_ERROR);
     expect(await response.json()).toEqual(INTERNAL_SERVER_ERROR_RESPONSE);
+  });
+
+  /** Should attach a request id to error responses. */
+  test("attaches a request id to error responses", async () => {
+    const app = createApp(TEST_APP_CONFIG);
+    const response = await app.request(UNKNOWN_ROUTE_PATH);
+
+    expect(response.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  /** Should attach unique request ids per request. */
+  test("attaches unique request ids per request", async () => {
+    const app = createApp(TEST_APP_CONFIG);
+    const first = await app.request("/health");
+    const second = await app.request("/health");
+
+    expect(first.headers.get("x-request-id")).toBeTruthy();
+    expect(second.headers.get("x-request-id")).toBeTruthy();
+    expect(first.headers.get("x-request-id")).not.toBe(second.headers.get("x-request-id"));
   });
 });

@@ -20,6 +20,7 @@ const PROVIDER: ProviderCandidate = {
   supportsStreaming: true,
   supportsReasoning: true,
   rateLimit: {},
+  cost: {},
 };
 
 describe("openai-compatible adapter", () => {
@@ -111,7 +112,11 @@ describe("openai-compatible adapter", () => {
       })) as unknown as typeof fetch;
 
     const adapter = createOpenAiCompatibleAdapter({ fetch: mockFetch });
-    const response = await adapter.sendStream({ url: "https://example.com", headers: {}, body: {} });
+    const response = await adapter.sendStream({
+      url: "https://example.com",
+      headers: {},
+      body: {},
+    });
 
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toContain("text/event-stream");

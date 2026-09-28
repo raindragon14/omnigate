@@ -19,7 +19,15 @@ describe("provider stats repository", () => {
   test("records success attempt", () => {
     const { repository, close } = createRepository();
 
-    repository.recordProviderAttempt({ providerId: PROVIDER_ID, modelFamily: MODEL_FAMILY, status: "success", latencyMs: 100, tokenCount: 50, tokensPerSecond: 75, nowMs: NOW_MS });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      latencyMs: 100,
+      tokenCount: 50,
+      tokensPerSecond: 75,
+      nowMs: NOW_MS,
+    });
 
     const stats = repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-02");
 
@@ -34,7 +42,13 @@ describe("provider stats repository", () => {
   test("records failure attempt", () => {
     const { repository, close } = createRepository();
 
-    repository.recordProviderAttempt({ providerId: PROVIDER_ID, modelFamily: MODEL_FAMILY, status: "failure", latencyMs: 200, nowMs: NOW_MS });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "failure",
+      latencyMs: 200,
+      nowMs: NOW_MS,
+    });
 
     const stats = repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-02");
 
@@ -48,7 +62,14 @@ describe("provider stats repository", () => {
     const { repository, close } = createRepository();
     const cooldownUntil = NOW_MS + 60_000;
 
-    repository.recordProviderAttempt({ providerId: PROVIDER_ID, modelFamily: MODEL_FAMILY, status: "rate_limited", latencyMs: 50, cooldownUntil, nowMs: NOW_MS });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "rate_limited",
+      latencyMs: 50,
+      cooldownUntil,
+      nowMs: NOW_MS,
+    });
 
     const stats = repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-02");
 
@@ -62,8 +83,22 @@ describe("provider stats repository", () => {
   test("updates cumulative averages", () => {
     const { repository, close } = createRepository();
 
-    repository.recordProviderAttempt({ providerId: PROVIDER_ID, modelFamily: MODEL_FAMILY, status: "success", latencyMs: 100, tokensPerSecond: 80, nowMs: NOW_MS });
-    repository.recordProviderAttempt({ providerId: PROVIDER_ID, modelFamily: MODEL_FAMILY, status: "success", latencyMs: 300, tokensPerSecond: 40, nowMs: NOW_MS });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      latencyMs: 100,
+      tokensPerSecond: 80,
+      nowMs: NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      latencyMs: 300,
+      tokensPerSecond: 40,
+      nowMs: NOW_MS,
+    });
 
     const stats = repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-02");
 
@@ -76,8 +111,22 @@ describe("provider stats repository", () => {
   test("records time to first token average", () => {
     const { repository, close } = createRepository();
 
-    repository.recordProviderAttempt({ providerId: PROVIDER_ID, modelFamily: MODEL_FAMILY, status: "success", latencyMs: 100, timeToFirstTokenMs: 40, nowMs: NOW_MS });
-    repository.recordProviderAttempt({ providerId: PROVIDER_ID, modelFamily: MODEL_FAMILY, status: "success", latencyMs: 200, timeToFirstTokenMs: 80, nowMs: NOW_MS });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      latencyMs: 100,
+      timeToFirstTokenMs: 40,
+      nowMs: NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      latencyMs: 200,
+      timeToFirstTokenMs: 80,
+      nowMs: NOW_MS,
+    });
 
     const stats = repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-02");
 
@@ -89,11 +138,167 @@ describe("provider stats repository", () => {
   test("separates stats by day", () => {
     const { repository, close } = createRepository();
 
-    repository.recordProviderAttempt({ providerId: PROVIDER_ID, modelFamily: MODEL_FAMILY, status: "success", latencyMs: 100, nowMs: NOW_MS });
-    repository.recordProviderAttempt({ providerId: PROVIDER_ID, modelFamily: MODEL_FAMILY, status: "success", latencyMs: 100, nowMs: NOW_MS + 86_400_000 });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      latencyMs: 100,
+      nowMs: NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      latencyMs: 100,
+      nowMs: NOW_MS + 86_400_000,
+    });
 
-    expect(repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-02")?.requestCount).toBe(1);
-    expect(repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-03")?.requestCount).toBe(1);
+    expect(repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-02")?.requestCount).toBe(
+      1,
+    );
+    expect(repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-03")?.requestCount).toBe(
+      1,
+    );
+    close();
+  });
+
+  /** Should accumulate input/output tokens and cost across attempts. */
+  test("accumulates token split and cost", () => {
+    const { repository, close } = createRepository();
+
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      tokenCount: 10,
+      inputTokenCount: 4,
+      outputTokenCount: 6,
+      costUsd: 0.000_002,
+      nowMs: NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      tokenCount: 20,
+      inputTokenCount: 10,
+      outputTokenCount: 10,
+      costUsd: 0.000_004,
+      nowMs: NOW_MS,
+    });
+
+    const stats = repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-02");
+
+    expect(stats?.tokenCount).toBe(30);
+    expect(stats?.inputTokenCount).toBe(14);
+    expect(stats?.outputTokenCount).toBe(16);
+    expect(stats?.totalCostUsd).toBeCloseTo(0.000_006, 9);
+    close();
+  });
+
+  /** Should default token split and cost to zero when attempts omit them. */
+  test("defaults token split and cost to zero", () => {
+    const { repository, close } = createRepository();
+
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "failure",
+      nowMs: NOW_MS,
+    });
+
+    const stats = repository.getProviderStats(PROVIDER_ID, MODEL_FAMILY, "2026-01-02");
+
+    expect(stats?.inputTokenCount).toBe(0);
+    expect(stats?.outputTokenCount).toBe(0);
+    expect(stats?.totalCostUsd).toBe(0);
+    close();
+  });
+
+  /** Should list one day of stats ordered by provider and family. */
+  test("lists stats for one day", () => {
+    const { repository, close } = createRepository();
+
+    repository.recordProviderAttempt({
+      providerId: "provider_b",
+      modelFamily: "chat-quality",
+      status: "success",
+      nowMs: NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      nowMs: NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      nowMs: NOW_MS + 86_400_000,
+    });
+
+    const rows = repository.listProviderStats("2026-01-02");
+
+    expect(rows.map((row) => row.providerId)).toEqual([PROVIDER_ID, "provider_b"]);
+    expect(rows).toHaveLength(2);
+    close();
+  });
+
+  /** Should clear persisted cooldowns for one provider or all. */
+  test("clears persisted cooldowns", () => {
+    const { repository, close } = createRepository();
+    const cooldownUntil = NOW_MS + 60_000;
+
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "rate_limited",
+      cooldownUntil,
+      nowMs: NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: "provider_b",
+      modelFamily: MODEL_FAMILY,
+      status: "rate_limited",
+      cooldownUntil,
+      nowMs: NOW_MS,
+    });
+
+    expect(repository.clearProviderCooldowns(PROVIDER_ID)).toBe(1);
+    expect(repository.getCooldownUntil(PROVIDER_ID, MODEL_FAMILY)).toBeUndefined();
+    expect(repository.getCooldownUntil("provider_b", MODEL_FAMILY)).toBe(cooldownUntil);
+    expect(repository.clearProviderCooldowns()).toBe(1);
+    expect(repository.getCooldownUntil("provider_b", MODEL_FAMILY)).toBeUndefined();
+    close();
+  });
+
+  /** Should delete one day of stats and report the row count. */
+  test("resets one day of stats", () => {
+    const { repository, close } = createRepository();
+
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      nowMs: NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: "provider_b",
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      nowMs: NOW_MS,
+    });
+    repository.recordProviderAttempt({
+      providerId: PROVIDER_ID,
+      modelFamily: MODEL_FAMILY,
+      status: "success",
+      nowMs: NOW_MS + 86_400_000,
+    });
+
+    expect(repository.resetProviderStats("2026-01-02")).toBe(2);
+    expect(repository.listProviderStats("2026-01-02")).toHaveLength(0);
+    expect(repository.listProviderStats("2026-01-03")).toHaveLength(1);
     close();
   });
 });

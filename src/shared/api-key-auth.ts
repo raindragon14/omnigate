@@ -1,30 +1,34 @@
-import type { Context, Hono } from "hono";
+import type { Context, Hono, Next } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { timingSafeEqual } from "crypto";
 
 import { HTTP_STATUS_UNAUTHORIZED } from "./http-status";
 
-const AUTH_ROUTE_PATTERN = "/v1/*";
+const AUTH_ROUTE_PATTERNS = ["/v1/*", "/metrics"];
 const AUTHORIZATION_HEADER = "Authorization";
 const UNAUTHORIZED_CODE = "unauthorized";
 const UNAUTHORIZED_MESSAGE = "Unauthorized";
 
 /**
- * Registers Bearer-token authentication for OpenAI-compatible /v1 routes.
+ * Registers Bearer-token authentication for OpenAI-compatible /v1 routes and
+ * the operational /metrics endpoint. GET /health stays unauthenticated.
  * @param app     The Hono application instance.
  * @param apiKey  The expected OmniGate API key.
  */
 export function registerApiKeyAuth(app: Hono, apiKey: string): void {
   const expectedAuthorization = Buffer.from(`Bearer ${apiKey}`);
 
-  app.use(AUTH_ROUTE_PATTERN, async (context, next) => {
+  const authenticate = async (context: Context, next: Next): Promise<Response | void> => {
     if (isAuthorized(context.req.header(AUTHORIZATION_HEADER), expectedAuthorization)) {
       await next();
       return;
     }
 
     return sendUnauthorized(context);
-  });
+  };
+
+  app.use(AUTH_ROUTE_PATTERNS[0]!, authenticate);
+  app.use(AUTH_ROUTE_PATTERNS[1]!, authenticate);
 }
 
 /**
@@ -36,7 +40,10 @@ export function registerApiKeyAuth(app: Hono, apiKey: string): void {
  * the practical risk is negligible — this is defense-in-depth to ensure
  * correctness regardless of key format or runtime behavior.
  */
-function isAuthorized(rawAuthorization: string | undefined, expectedAuthorization: Buffer): boolean {
+function isAuthorized(
+  rawAuthorization: string | undefined,
+  expectedAuthorization: Buffer,
+): boolean {
   if (rawAuthorization === undefined) {
     return false;
   }

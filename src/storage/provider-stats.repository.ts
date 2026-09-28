@@ -18,6 +18,9 @@ type ProviderStatsRow = {
   day: string;
   request_count: number;
   token_count: number;
+  input_token_count: number;
+  output_token_count: number;
+  total_cost_usd: number;
   success_count: number;
   failure_count: number;
   rate_limit_count: number;
@@ -29,8 +32,35 @@ type ProviderStatsRow = {
 
 type PreparedStatements = {
   getStats: Statement<ProviderStatsRow, [string, string, string]>;
+  listStats: Statement<ProviderStatsRow, [string]>;
   getCooldown: Statement<{ cooldown_until: number | null }, [string, string]>;
-  upsertStats: Statement<unknown, [string, string, string, number, number, number, number, number, number | null, number | null, number | null, number | null]>;
+  clearAllCooldowns: Statement<unknown, []>;
+  clearOneCooldown: Statement<unknown, [string]>;
+  resetDayStats: Statement<unknown, [string]>;
+  upsertStats: Statement<
+    unknown,
+    [
+      string,
+      string,
+      string,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number | null,
+      number | null,
+      number | null,
+      number | null,
+    ]
+  >;
+};
+
+type ChangedRowCount = {
+  changes: number;
 };
 
 /**
@@ -42,9 +72,15 @@ export function createProviderStatsRepository(database: Database): ProviderStats
   const statements = prepareStatements(database);
 
   return {
-    getProviderStats: (providerId, modelFamily, day) => getProviderStats(statements, providerId, modelFamily, day),
+    getProviderStats: (providerId, modelFamily, day) =>
+      getProviderStats(statements, providerId, modelFamily, day),
+    listProviderStats: (day) => listProviderStats(statements, day),
     recordProviderAttempt: (update) => recordProviderAttempt(database, statements, update),
-    getCooldownUntil: (providerId, modelFamily) => getCooldownUntil(statements, providerId, modelFamily),
+    getCooldownUntil: (providerId, modelFamily) =>
+      getCooldownUntil(statements, providerId, modelFamily),
+    clearProviderCooldowns: (providerId) =>
+      clearProviderCooldowns(database, statements, providerId),
+    resetProviderStats: (day) => resetProviderStats(database, statements, day),
   };
 }
 
@@ -56,15 +92,31 @@ function prepareStatements(database: Database): PreparedStatements {
     getCooldown: database.query<{ cooldown_until: number | null }, [string, string]>(`
       SELECT MAX(cooldown_until) AS cooldown_until FROM provider_stats WHERE provider_id = ? AND model_family = ?
     `),
+    listStats: database.query<ProviderStatsRow, [string]>(`
+      SELECT * FROM provider_stats WHERE day = ? ORDER BY provider_id, model_family
+    `),
+    clearAllCooldowns: database.query(`
+      UPDATE provider_stats SET cooldown_until = NULL WHERE cooldown_until IS NOT NULL
+    `),
+    clearOneCooldown: database.query(`
+      UPDATE provider_stats SET cooldown_until = NULL WHERE provider_id = ? AND cooldown_until IS NOT NULL
+    `),
+    resetDayStats: database.query(`
+      DELETE FROM provider_stats WHERE day = ?
+    `),
     upsertStats: database.query(`
       INSERT INTO provider_stats (
-        provider_id, model_family, day, request_count, token_count, success_count,
+        provider_id, model_family, day, request_count, token_count, input_token_count,
+        output_token_count, total_cost_usd, success_count,
         failure_count, rate_limit_count, avg_latency_ms, avg_tokens_per_second,
         avg_time_to_first_token_ms, cooldown_until
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(provider_id, model_family, day) DO UPDATE SET
         request_count = excluded.request_count,
         token_count = excluded.token_count,
+        input_token_count = excluded.input_token_count,
+        output_token_count = excluded.output_token_count,
+        total_cost_usd = excluded.total_cost_usd,
         success_count = excluded.success_count,
         failure_count = excluded.failure_count,
         rate_limit_count = excluded.rate_limit_count,
@@ -121,6 +173,40 @@ function getCooldownUntil(
   return row?.cooldown_until ?? undefined;
 }
 
+function listProviderStats(statements: PreparedStatements, day: string): ProviderStatsRecord[] {
+  return statements.listStats.all(day).map(toStatsRecord);
+}
+
+function clearProviderCooldowns(
+  database: Database,
+  statements: PreparedStatements,
+  providerId: string | undefined,
+): number {
+  if (providerId === undefined) {
+    statements.clearAllCooldowns.run();
+  } else {
+    statements.clearOneCooldown.run(providerId);
+  }
+
+  return getChangedRowCount(database);
+}
+
+function resetProviderStats(
+  database: Database,
+  statements: PreparedStatements,
+  day: string,
+): number {
+  statements.resetDayStats.run(day);
+
+  return getChangedRowCount(database);
+}
+
+function getChangedRowCount(database: Database): number {
+  const row = database.query<ChangedRowCount, []>("SELECT changes() AS changes").get();
+
+  return row?.changes ?? 0;
+}
+
 function applyStatsUpdate(
   current: ProviderStatsRecord | undefined,
   update: ProviderStatsUpdate,
@@ -134,10 +220,17 @@ function applyStatsUpdate(
     day,
     requestCount,
     tokenCount: (current?.tokenCount ?? 0) + (update.tokenCount ?? 0),
+    inputTokenCount: (current?.inputTokenCount ?? 0) + (update.inputTokenCount ?? 0),
+    outputTokenCount: (current?.outputTokenCount ?? 0) + (update.outputTokenCount ?? 0),
+    totalCostUsd: (current?.totalCostUsd ?? 0) + (update.costUsd ?? 0),
     successCount: (current?.successCount ?? 0) + successIncrement(update.status),
     failureCount: (current?.failureCount ?? 0) + failureIncrement(update.status),
     rateLimitCount: (current?.rateLimitCount ?? 0) + rateLimitIncrement(update.status),
-    avgLatencyMs: calculateAverage(current?.avgLatencyMs, current?.requestCount ?? 0, update.latencyMs),
+    avgLatencyMs: calculateAverage(
+      current?.avgLatencyMs,
+      current?.requestCount ?? 0,
+      update.latencyMs,
+    ),
     avgTokensPerSecond: calculateAverage(
       current?.avgTokensPerSecond,
       current?.requestCount ?? 0,
@@ -159,6 +252,9 @@ function saveProviderStats(statements: PreparedStatements, record: ProviderStats
     record.day,
     record.requestCount,
     record.tokenCount,
+    record.inputTokenCount,
+    record.outputTokenCount,
+    record.totalCostUsd,
     record.successCount,
     record.failureCount,
     record.rateLimitCount,
@@ -176,6 +272,9 @@ function toStatsRecord(row: ProviderStatsRow): ProviderStatsRecord {
     day: row.day,
     requestCount: row.request_count,
     tokenCount: row.token_count,
+    inputTokenCount: row.input_token_count,
+    outputTokenCount: row.output_token_count,
+    totalCostUsd: row.total_cost_usd,
     successCount: row.success_count,
     failureCount: row.failure_count,
     rateLimitCount: row.rate_limit_count,
@@ -195,7 +294,7 @@ function calculateAverage(
     return current;
   }
 
-  return current === undefined ? sample : ((current * sampleCount) + sample) / (sampleCount + 1);
+  return current === undefined ? sample : (current * sampleCount + sample) / (sampleCount + 1);
 }
 
 function successIncrement(status: ProviderAttemptStatus): number {

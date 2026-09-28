@@ -1,7 +1,21 @@
 import { describe, expect, test } from "bun:test";
 
-import type { OpenAIChatCompletionResponse, ProviderAdapter, ProviderCandidate, ProviderRequest, ProviderResponse, ProviderStatsRepository, ProviderStatsUpdate, RouterRequest } from "../shared/signatures";
-import { classifyProviderError, runProviderFallback, runProviderStreamFallback } from "./fallback-runner";
+import type {
+  OpenAIChatCompletionResponse,
+  ProviderAdapter,
+  ProviderCandidate,
+  ProviderRequest,
+  ProviderResponse,
+  ProviderStatsRepository,
+  ProviderStatsUpdate,
+  RouterRequest,
+} from "../shared/signatures";
+import {
+  calculateAttemptCost,
+  classifyProviderError,
+  runProviderFallback,
+  runProviderStreamFallback,
+} from "./fallback-runner";
 import { createProviderCooldownStore } from "./provider-cooldown";
 
 const SUCCESS_RESPONSE: OpenAIChatCompletionResponse = {
@@ -14,20 +28,49 @@ const SUCCESS_RESPONSE: OpenAIChatCompletionResponse = {
 };
 
 function makeProvider(id: string, priority: number): ProviderCandidate {
-  return { id, baseUrl: "https://example.com", model: "test-model", family: "chat-fast", priority, qualityScore: 85, enabled: true, paidFallback: false, apiKeyEnv: "KEY_" + id.toUpperCase(), context: 100000, supportsTools: true, supportsJson: true, supportsStreaming: true, supportsReasoning: true, rateLimit: {} };
+  return {
+    id,
+    baseUrl: "https://example.com",
+    model: "test-model",
+    family: "chat-fast",
+    priority,
+    qualityScore: 85,
+    enabled: true,
+    paidFallback: false,
+    apiKeyEnv: "KEY_" + id.toUpperCase(),
+    context: 100000,
+    supportsTools: true,
+    supportsJson: true,
+    supportsStreaming: true,
+    supportsReasoning: true,
+    rateLimit: {},
+    cost: {},
+  };
 }
 
 function mockAdapter(overrides: Partial<ProviderAdapter> = {}): ProviderAdapter {
   return {
     id: "test-adapter",
     supports: () => true,
-    transformRequest: (request: RouterRequest, provider: ProviderCandidate, apiKey: string): ProviderRequest => ({
+    transformRequest: (
+      request: RouterRequest,
+      provider: ProviderCandidate,
+      apiKey: string,
+    ): ProviderRequest => ({
       url: provider.baseUrl,
       headers: { Authorization: `Bearer ${apiKey}` },
       body: { model: provider.model },
     }),
-    send: async (): Promise<ProviderResponse> => ({ status: 200, body: SUCCESS_RESPONSE as unknown as Record<string, unknown>, headers: {} }),
-    sendStream: async () => ({ status: 200, headers: {}, stream: new ReadableStream<Uint8Array>() }),
+    send: async (): Promise<ProviderResponse> => ({
+      status: 200,
+      body: SUCCESS_RESPONSE as unknown as Record<string, unknown>,
+      headers: {},
+    }),
+    sendStream: async () => ({
+      status: 200,
+      headers: {},
+      stream: new ReadableStream<Uint8Array>(),
+    }),
     ...overrides,
   };
 }
@@ -38,8 +81,11 @@ function mockStatsRepository(): ProviderStatsRepository & { updates: ProviderSta
   return {
     updates,
     getProviderStats: () => undefined,
+    listProviderStats: () => [],
     recordProviderAttempt: (update) => updates.push(update),
     getCooldownUntil: () => undefined,
+    clearProviderCooldowns: () => 0,
+    resetProviderStats: () => 0,
   };
 }
 
@@ -56,7 +102,7 @@ describe("fallback runner", () => {
         resolveApiKey: () => "sk-mock",
         cooldownStore: createProviderCooldownStore(),
         providerStatsRepository: repository,
-        nowMs: () => nowMs += 100,
+        nowMs: () => (nowMs += 100),
       });
 
       expect(result.id).toBe("mock-id");
@@ -75,7 +121,11 @@ describe("fallback runner", () => {
             return { status: 429, body: {}, headers: { "retry-after": "1" } };
           }
 
-          return { status: 200, body: SUCCESS_RESPONSE as unknown as Record<string, unknown>, headers: {} };
+          return {
+            status: 200,
+            body: SUCCESS_RESPONSE as unknown as Record<string, unknown>,
+            headers: {},
+          };
         },
       });
 
@@ -111,7 +161,11 @@ describe("fallback runner", () => {
             return { status: 500, body: {}, headers: {} };
           }
 
-          return { status: 200, body: SUCCESS_RESPONSE as unknown as Record<string, unknown>, headers: {} };
+          return {
+            status: 200,
+            body: SUCCESS_RESPONSE as unknown as Record<string, unknown>,
+            headers: {},
+          };
         },
       });
 
@@ -162,7 +216,11 @@ describe("fallback runner", () => {
             return { status: 401, body: {}, headers: {} };
           }
 
-          return { status: 200, body: SUCCESS_RESPONSE as unknown as Record<string, unknown>, headers: {} };
+          return {
+            status: 200,
+            body: SUCCESS_RESPONSE as unknown as Record<string, unknown>,
+            headers: {},
+          };
         },
       });
 
@@ -186,7 +244,11 @@ describe("fallback runner", () => {
         send: async (): Promise<ProviderResponse> => {
           callCount++;
 
-          return { status: 200, body: SUCCESS_RESPONSE as unknown as Record<string, unknown>, headers: {} };
+          return {
+            status: 200,
+            body: SUCCESS_RESPONSE as unknown as Record<string, unknown>,
+            headers: {},
+          };
         },
       });
 
@@ -194,7 +256,7 @@ describe("fallback runner", () => {
         request: { messages: [], model: "test", stream: false, mode: "balanced" },
         providers: [makeProvider("alpha", 90), makeProvider("beta", 80)],
         adapter,
-        resolveApiKey: (envVar: string) => envVar === "KEY_BETA" ? "sk" : undefined,
+        resolveApiKey: (envVar: string) => (envVar === "KEY_BETA" ? "sk" : undefined),
         cooldownStore: createProviderCooldownStore(),
         nowMs: () => Date.now(),
       });
@@ -214,7 +276,11 @@ describe("fallback runner", () => {
             return { status: 200, body: {}, headers: {}, isMalformed: true };
           }
 
-          return { status: 200, body: SUCCESS_RESPONSE as unknown as Record<string, unknown>, headers: {} };
+          return {
+            status: 200,
+            body: SUCCESS_RESPONSE as unknown as Record<string, unknown>,
+            headers: {},
+          };
         },
       });
 
@@ -279,7 +345,13 @@ describe("fallback runner", () => {
       const result = await runProviderStreamFallback({
         request: { messages: [], model: "test", stream: true, mode: "balanced" },
         providers: [makeProvider("alpha", 90)],
-        adapter: mockAdapter({ sendStream: async () => ({ status: 200, headers: {}, stream: streamFromText("data: ok\n\n") }) }),
+        adapter: mockAdapter({
+          sendStream: async () => ({
+            status: 200,
+            headers: {},
+            stream: streamFromText("data: ok\n\n"),
+          }),
+        }),
         resolveApiKey: () => "sk-mock",
         cooldownStore: createProviderCooldownStore(),
         nowMs: () => Date.now(),
@@ -329,11 +401,17 @@ describe("fallback runner", () => {
       const result = await runProviderStreamFallback({
         request: { messages: [], model: "test", stream: true, mode: "balanced" },
         providers: [makeProvider("alpha", 90)],
-        adapter: mockAdapter({ sendStream: async () => ({ status: 200, headers: {}, stream: streamFromText("data: ok\n\n") }) }),
+        adapter: mockAdapter({
+          sendStream: async () => ({
+            status: 200,
+            headers: {},
+            stream: streamFromText("data: ok\n\n"),
+          }),
+        }),
         resolveApiKey: () => "sk-mock",
         cooldownStore: createProviderCooldownStore(),
         providerStatsRepository: repository,
-        nowMs: () => nowMs += 50,
+        nowMs: () => (nowMs += 50),
       });
 
       await new Response(result.stream).text();
@@ -346,23 +424,33 @@ describe("fallback runner", () => {
 
   describe("classifyProviderError", () => {
     test("classifies 429 as rate_limited", () => {
-      expect(classifyProviderError({ status: 429, body: {}, headers: {} }, undefined)).toBe("provider_rate_limited");
+      expect(classifyProviderError({ status: 429, body: {}, headers: {} }, undefined)).toBe(
+        "provider_rate_limited",
+      );
     });
 
     test("classifies 401 as auth_error", () => {
-      expect(classifyProviderError({ status: 401, body: {}, headers: {} }, undefined)).toBe("provider_auth_error");
+      expect(classifyProviderError({ status: 401, body: {}, headers: {} }, undefined)).toBe(
+        "provider_auth_error",
+      );
     });
 
     test("classifies 403 as auth_error", () => {
-      expect(classifyProviderError({ status: 403, body: {}, headers: {} }, undefined)).toBe("provider_auth_error");
+      expect(classifyProviderError({ status: 403, body: {}, headers: {} }, undefined)).toBe(
+        "provider_auth_error",
+      );
     });
 
     test("classifies 500 as server_error", () => {
-      expect(classifyProviderError({ status: 500, body: {}, headers: {} }, undefined)).toBe("provider_server_error");
+      expect(classifyProviderError({ status: 500, body: {}, headers: {} }, undefined)).toBe(
+        "provider_server_error",
+      );
     });
 
     test("classifies malformed 200 as malformed_response", () => {
-      expect(classifyProviderError({ status: 200, body: {}, headers: {}, isMalformed: true }, undefined)).toBe("provider_malformed_response");
+      expect(
+        classifyProviderError({ status: 200, body: {}, headers: {}, isMalformed: true }, undefined),
+      ).toBe("provider_malformed_response");
     });
 
     test("classifies AbortError as timeout", () => {
@@ -375,6 +463,64 @@ describe("fallback runner", () => {
       const fetchError = new TypeError("fetch failed");
 
       expect(classifyProviderError(undefined, fetchError)).toBe("provider_network_error");
+    });
+  });
+
+  describe("calculateAttemptCost", () => {
+    const usage = { prompt_tokens: 1_000_000, completion_tokens: 500_000, total_tokens: 1_500_000 };
+
+    test("computes cost from tariff and usage", () => {
+      const provider = {
+        ...makeProvider("alpha", 90),
+        cost: { inputPer1m: 0.15, outputPer1m: 0.6 },
+      };
+
+      expect(calculateAttemptCost(provider, usage)).toBeCloseTo(0.45, 9);
+    });
+
+    test("returns undefined when the tariff is unknown", () => {
+      expect(calculateAttemptCost(makeProvider("alpha", 90), usage)).toBeUndefined();
+    });
+
+    test("returns undefined when usage is missing", () => {
+      const provider = {
+        ...makeProvider("alpha", 90),
+        cost: { inputPer1m: 0.15, outputPer1m: 0.6 },
+      };
+
+      expect(calculateAttemptCost(provider, undefined)).toBeUndefined();
+    });
+
+    test("records zero cost for free-tier tariffs", () => {
+      const provider = { ...makeProvider("alpha", 90), cost: { inputPer1m: 0, outputPer1m: 0 } };
+
+      expect(calculateAttemptCost(provider, usage)).toBe(0);
+    });
+  });
+
+  describe("cost recording", () => {
+    test("records token split and cost on success", async () => {
+      const repository = mockStatsRepository();
+      let nowMs = 1_000;
+      const provider = {
+        ...makeProvider("alpha", 90),
+        cost: { inputPer1m: 1, outputPer1m: 2 },
+      };
+
+      await runProviderFallback({
+        request: { messages: [], model: "test", stream: false, mode: "balanced" },
+        providers: [provider],
+        adapter: mockAdapter(),
+        resolveApiKey: () => "sk-mock",
+        cooldownStore: createProviderCooldownStore(),
+        providerStatsRepository: repository,
+        nowMs: () => (nowMs += 100),
+      });
+
+      // SUCCESS_RESPONSE usage: 4 prompt + 6 completion tokens at $1/$2 per 1M.
+      expect(repository.updates[0]?.inputTokenCount).toBe(4);
+      expect(repository.updates[0]?.outputTokenCount).toBe(6);
+      expect(repository.updates[0]?.costUsd).toBeCloseTo(0.000_016, 9);
     });
   });
 });

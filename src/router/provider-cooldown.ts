@@ -22,6 +22,18 @@ export function createProviderCooldownStore(): ProviderCooldownStore {
       cooldowns.set(providerId, Math.min(cooldownUntilMs, Date.now() + MAX_COOLDOWN_MS));
     },
 
+    clearCooldown(providerId: string): boolean {
+      return cooldowns.delete(providerId);
+    },
+
+    clearAllCooldowns(): number {
+      const count = cooldowns.size;
+
+      cooldowns.clear();
+
+      return count;
+    },
+
     isProviderCoolingDown(providerId: string, nowMs: number): boolean {
       pruneExpiredCooldowns(cooldowns, nowMs);
 
@@ -51,7 +63,10 @@ function pruneExpiredCooldowns(cooldowns: Map<string, number>, nowMs: number): v
  * @param nowMs      Current time in milliseconds.
  * @returns Milliseconds from now to wait, or undefined when unparseable.
  */
-export function parseRetryAfterMs(rawHeader: string | undefined, nowMs: number): number | undefined {
+export function parseRetryAfterMs(
+  rawHeader: string | undefined,
+  nowMs: number,
+): number | undefined {
   if (rawHeader === undefined || rawHeader.trim() === "") {
     return undefined;
   }
