@@ -26,7 +26,10 @@ const VALID_REGISTRY = {
     },
   ],
   aliases: {
-    "omnigate/auto-fast": { families: ["chat-fast"] },
+    "omnigate/auto": { families: ["chat-fast"] },
+  },
+  profiles: {
+    "omnigate/auto": { categories: ["knowledge"], min_quality_ratio: 0.85 },
   },
 };
 
@@ -47,20 +50,32 @@ describe("provider loader", () => {
     expect(provider!.paidFallback).toBe(false);
   });
 
-  test("defaults profiles to an empty record", () => {
+  test("parses the fixture profile", () => {
     const registry = parseProviderRegistry(VALID_REGISTRY);
 
-    expect(registry.profiles).toEqual({});
+    expect(registry.profiles["omnigate/auto"]).toEqual({
+      categories: ["knowledge"],
+      minQualityRatio: 0.85,
+    });
+  });
+
+  test("rejects aliases without a profile", () => {
+    expect(() =>
+      parseProviderRegistry({
+        ...VALID_REGISTRY,
+        profiles: {},
+      }),
+    ).toThrow("profiles.omnigate/auto missing");
   });
 
   test("parses alias profiles with categories and quality ratio", () => {
     const registry = parseProviderRegistry({
       ...VALID_REGISTRY,
       profiles: {
-        "omnigate/auto-fast": { categories: ["knowledge"], min_quality_ratio: 0.8 },
+        "omnigate/auto": { categories: ["knowledge"], min_quality_ratio: 0.8 },
       },
     });
-    const profile = registry.profiles["omnigate/auto-fast"];
+    const profile = registry.profiles["omnigate/auto"];
 
     expect(profile).toBeDefined();
     expect(profile!.categories).toEqual(["knowledge"]);
@@ -71,7 +86,7 @@ describe("provider loader", () => {
     expect(() =>
       parseProviderRegistry({
         ...VALID_REGISTRY,
-        profiles: { "omnigate/auto-fast": { categories: [] } },
+        profiles: { "omnigate/auto": { categories: [] } },
       }),
     ).toThrow(REGISTRY_ERROR_MESSAGE);
   });
@@ -80,7 +95,7 @@ describe("provider loader", () => {
     expect(() =>
       parseProviderRegistry({
         ...VALID_REGISTRY,
-        profiles: { "omnigate/auto-fast": { categories: ["coding"], min_quality_ratio: 3 } },
+        profiles: { "omnigate/auto": { categories: ["coding"], min_quality_ratio: 3 } },
       }),
     ).toThrow(REGISTRY_ERROR_MESSAGE);
   });
@@ -175,7 +190,7 @@ describe("provider loader", () => {
   });
 
   test("rejects empty alias families", () => {
-    const aliases = { "omnigate/auto-fast": { families: [] } };
+    const aliases = { "omnigate/auto": { families: [] } };
 
     expect(() => parseProviderRegistry({ ...VALID_REGISTRY, aliases })).toThrow(
       REGISTRY_ERROR_MESSAGE,

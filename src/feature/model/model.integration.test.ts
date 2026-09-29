@@ -7,10 +7,10 @@ import { HTTP_STATUS_OK, HTTP_STATUS_UNAUTHORIZED } from "../../shared/http-stat
 const MODEL_ROUTE_PATH = "/v1/models";
 const EXPECTED_MODEL_LIST_OBJECT = "list";
 const EXPECTED_MODEL_IDS = [
-  "omnigate/auto-fast",
-  "omnigate/auto-quality",
-  "omnigate/coding-auto",
-  "omnigate/coding-fast",
+  "omnigate/auto",
+  "omnigate/code-fast",
+  "omnigate/code-quality",
+  "omnigate/general-low-cost",
 ];
 const TEST_OMNIGATE_API_KEY = "test-omnigate-key";
 const AUTHORIZATION_HEADER = `Bearer ${TEST_OMNIGATE_API_KEY}`;

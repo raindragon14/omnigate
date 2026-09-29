@@ -4,10 +4,10 @@ import { listRouterModels } from "./model.service";
 
 const EXPECTED_MODEL_LIST_OBJECT = "list";
 const EXPECTED_MODEL_IDS = [
-  "omnigate/auto-fast",
-  "omnigate/auto-quality",
-  "omnigate/coding-auto",
-  "omnigate/coding-fast",
+  "omnigate/auto",
+  "omnigate/code-fast",
+  "omnigate/code-quality",
+  "omnigate/general-low-cost",
 ];
 
 /** Unit tests for the model feature. */

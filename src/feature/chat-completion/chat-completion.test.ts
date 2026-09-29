@@ -19,7 +19,7 @@ const SUCCESS_RESPONSE: OpenAIChatCompletionResponse = {
   id: "chatcmpl-test",
   object: "chat.completion",
   created: 1_700_000_000,
-  model: "omnigate/auto-fast",
+  model: "omnigate/auto",
   choices: [{ index: 0, message: { role: "assistant", content: "Hello!" }, finish_reason: "stop" }],
   usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
 };
@@ -135,7 +135,7 @@ describe("chat completion feature", () => {
 
     await routeChatCompletion(
       {
-        model: "omnigate/auto-fast",
+        model: "omnigate/auto",
         messages: [{ role: "user", content: "hi" }],
         reasoning_effort: "high",
       },
@@ -148,7 +148,7 @@ describe("chat completion feature", () => {
   test("throws invalid request for multimodal content parts", async () => {
     try {
       await routeChatCompletion({
-        model: "omnigate/auto-fast",
+        model: "omnigate/auto",
         messages: [
           {
             role: "user",
@@ -185,7 +185,7 @@ describe("chat completion feature", () => {
     const adapter = createMockAdapter({ json: SUCCESS_RESPONSE });
     const result = await routeChatCompletion(
       {
-        model: "omnigate/auto-fast",
+        model: "omnigate/auto",
         messages: [{ role: "user", content: "hi" }],
       },
       adapter,
@@ -204,14 +204,39 @@ describe("chat completion feature", () => {
     });
     const result = await routeChatCompletion(
       {
-        model: "omnigate/coding-auto",
-        messages: [{ role: "user", content: "hi" }],
+        model: "omnigate/auto",
+        messages: [{ role: "user", content: "Fix this:\n```ts\nconst x = 1;\n```" }],
       },
       adapter,
     );
 
     expect(result.type).toBe("json");
     expect(result.response).toEqual(SUCCESS_RESPONSE);
+  });
+
+  test("rejects out-of-scope requests with a fallback hint", async () => {
+    try {
+      await routeChatCompletion(
+        {
+          model: "omnigate/code-fast",
+          messages: [{ role: "user", content: "Write a blog post about remote work" }],
+        },
+        createMockAdapter({ json: SUCCESS_RESPONSE }),
+      );
+
+      expect.unreachable("should have thrown");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RoutingError);
+      expect((error as RoutingError).code).toBe("profile_scope_mismatch");
+      expect((error as RoutingError).message).toContain("omnigate/auto");
+    }
+  });
+
+  test("quality proxy math: code-quality bar vs live registry", async () => {
+    const { checkQualityBar } = await import("../../router/profile-guard");
+
+    expect(checkQualityBar(85, 93, 0.95)).toBe(false);
+    expect(checkQualityBar(93, 93, 0.95)).toBe(true);
   });
 });
 

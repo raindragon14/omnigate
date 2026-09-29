@@ -28,6 +28,8 @@ const STREAM_RESPONSE_HEADERS = {
 
 const CLIENT_ERROR_CODES = new Set<string>([
   "no_provider_available",
+  "no_provider_meets_quality",
+  "profile_scope_mismatch",
   "no_api_key",
   "invalid_request",
 ]);

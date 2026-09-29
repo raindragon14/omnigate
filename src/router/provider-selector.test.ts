@@ -170,8 +170,8 @@ const ALL_PROVIDERS: ProviderCandidate[] = [
 ];
 
 const MOCK_ALIASES = {
-  "omnigate/auto-fast": { families: ["chat-fast"] },
-  "omnigate/auto-quality": { families: ["chat-quality"] },
+  "omnigate/auto": { families: ["chat-fast"] },
+  "omnigate/code-quality": { families: ["chat-quality"] },
 };
 
 const NOW_MS = 1_000_000;
@@ -179,7 +179,7 @@ const NOW_MS = 1_000_000;
 function makeInput(overrides: Partial<ProviderSelectionInput> = {}): ProviderSelectionInput {
   return {
     request: {
-      model: "omnigate/auto-fast",
+      model: "omnigate/auto",
       messages: [{ role: "user", content: "hi" }],
       stream: false,
       mode: "balanced",
@@ -223,7 +223,7 @@ describe("selectProviderCandidates", () => {
   test("excludes providers outside alias family", () => {
     const result = selectProviderCandidates(
       makeInput({
-        request: { model: "omnigate/auto-fast", messages: [], stream: false, mode: "balanced" },
+        request: { model: "omnigate/auto", messages: [], stream: false, mode: "balanced" },
       }),
     );
 
@@ -270,7 +270,7 @@ describe("selectProviderCandidates", () => {
     const result = selectProviderCandidates(
       makeInput({
         request: {
-          model: "omnigate/auto-fast",
+          model: "omnigate/auto",
           messages: [],
           stream: false,
           mode: "balanced",
@@ -287,7 +287,7 @@ describe("selectProviderCandidates", () => {
     const result = selectProviderCandidates(
       makeInput({
         request: {
-          model: "omnigate/auto-fast",
+          model: "omnigate/auto",
           messages: [],
           stream: false,
           mode: "balanced",
@@ -303,7 +303,7 @@ describe("selectProviderCandidates", () => {
   test("excludes providers without streaming support when request is streaming", () => {
     const result = selectProviderCandidates(
       makeInput({
-        request: { model: "omnigate/auto-fast", messages: [], stream: true, mode: "balanced" },
+        request: { model: "omnigate/auto", messages: [], stream: true, mode: "balanced" },
       }),
     );
 
@@ -315,7 +315,7 @@ describe("selectProviderCandidates", () => {
     const result = selectProviderCandidates(
       makeInput({
         request: {
-          model: "omnigate/auto-fast",
+          model: "omnigate/auto",
           messages: [],
           stream: false,
           mode: "balanced",
@@ -337,7 +337,7 @@ describe("selectProviderCandidates", () => {
   test("matches correct family", () => {
     const result = selectProviderCandidates(
       makeInput({
-        request: { model: "omnigate/auto-quality", messages: [], stream: false, mode: "balanced" },
+        request: { model: "omnigate/code-quality", messages: [], stream: false, mode: "balanced" },
       }),
     );
 

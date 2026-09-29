@@ -9,6 +9,13 @@ import type {
   RouterRequest,
 } from "../../shared/signatures";
 import { normalizeRequest, UnsupportedMessageContentError } from "../../router/request-normalizer";
+import {
+  classifyProfileCategory,
+  checkQualityBar,
+  enforceProfileScope,
+  qualityMissCode,
+  STRICT_QUALITY_PROFILES,
+} from "../../router/profile-guard";
 import { selectProviderCandidates } from "../../router/provider-selector";
 import { rankProviderCandidates } from "../../router/provider-scorer";
 import { runProviderFallback, runProviderStreamFallback } from "../../router/fallback-runner";
@@ -125,6 +132,12 @@ export async function routeChatCompletion(
   const routerRequest = normalizeRouterRequest(chatRequest);
   const registry = loadProviderRegistry();
 
+  enforceProfileScope(
+    routerRequest.model,
+    classifyProfileCategory(routerRequest.messages),
+    registry.profiles,
+  );
+
   const preliminaryCandidates = selectProviderCandidates({
     request: routerRequest,
     providers: registry.providers,
@@ -164,6 +177,8 @@ export async function routeChatCompletion(
     aliasConfig,
   });
 
+  enforceProfileQuality(routerRequest.model, candidates, registry);
+
   try {
     const fallbackInput = {
       request: routerRequest,
@@ -202,6 +217,57 @@ function normalizeRouterRequest(chatRequest: OpenAIChatRequest): RouterRequest {
 
 function getProviderStatsRepository(): ProviderStatsRepository {
   return getStatsStoreRepository();
+}
+
+function enforceProfileQuality(
+  model: string,
+  rankedCandidates: ProviderCandidate[],
+  registry: {
+    providers: ProviderCandidate[];
+    profiles: Record<string, { minQualityRatio?: number | undefined }>;
+  },
+): void {
+  const profile = registry.profiles[model];
+
+  if (profile?.minQualityRatio === undefined || rankedCandidates.length === 0) {
+    return;
+  }
+
+  const eligibleQualityScores = rankedCandidates
+    .map((candidate) => candidate.qualityScore)
+    .filter((score) => Number.isFinite(score));
+  const bestEligibleQualityScore =
+    eligibleQualityScores.length === 0 ? undefined : Math.max(...eligibleQualityScores);
+  const maxQualityScore = Math.max(
+    ...registry.providers
+      .filter((provider) => provider.enabled)
+      .map((provider) => provider.qualityScore),
+  );
+  const ratio =
+    bestEligibleQualityScore === undefined || maxQualityScore <= 0
+      ? undefined
+      : bestEligibleQualityScore / maxQualityScore;
+
+  if (checkQualityBar(bestEligibleQualityScore, maxQualityScore, profile.minQualityRatio)) {
+    return;
+  }
+
+  if (STRICT_QUALITY_PROFILES.has(model)) {
+    throw new RoutingError(
+      qualityMissCode(),
+      `model ${model} requires quality ratio ${profile.minQualityRatio} but best candidate offers ${ratio === undefined ? "unknown" : ratio.toFixed(3)}`,
+    );
+  }
+
+  console.log(
+    JSON.stringify({
+      route: "/v1/chat/completions",
+      model,
+      status: "quality_bar_missed",
+      ratio,
+      required: profile.minQualityRatio,
+    }),
+  );
 }
 
 function syncPersistedCooldowns(

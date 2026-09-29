@@ -30,7 +30,7 @@ body:
       description: Minimal steps to reproduce the bug
       placeholder: |
         1. Start OmniGate with `bun run dev`
-        2. Send request to `/v1/chat/completions` with model `omnigate/auto-fast`
+        2. Send request to `/v1/chat/completions` with model `omnigate/auto`
         3. Observe error
     validations:
       required: true

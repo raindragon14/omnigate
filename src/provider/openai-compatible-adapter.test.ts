@@ -27,7 +27,7 @@ describe("openai-compatible adapter", () => {
   test("forwards tool and JSON request fields", () => {
     const adapter = createOpenAiCompatibleAdapter();
     const request: RouterRequest = {
-      model: "omnigate/auto-fast",
+      model: "omnigate/auto",
       messages: [{ role: "user", content: "Return JSON" }],
       stream: false,
       mode: "balanced",
@@ -47,7 +47,7 @@ describe("openai-compatible adapter", () => {
   test("forwards reasoning_effort and stream options for streaming requests", () => {
     const adapter = createOpenAiCompatibleAdapter();
     const request: RouterRequest = {
-      model: "omnigate/auto-fast",
+      model: "omnigate/auto",
       messages: [{ role: "user", content: "think" }],
       stream: true,
       mode: "quality",
@@ -64,7 +64,7 @@ describe("openai-compatible adapter", () => {
   test("omits reasoning_effort when absent and stream_options when non-streaming", () => {
     const adapter = createOpenAiCompatibleAdapter();
     const request: RouterRequest = {
-      model: "omnigate/auto-fast",
+      model: "omnigate/auto",
       messages: [{ role: "user", content: "hi" }],
       stream: false,
       mode: "balanced",
@@ -80,7 +80,7 @@ describe("openai-compatible adapter", () => {
   test("uses the provider max_tokens_field name", () => {
     const adapter = createOpenAiCompatibleAdapter();
     const request: RouterRequest = {
-      model: "omnigate/auto-fast",
+      model: "omnigate/auto",
       messages: [{ role: "user", content: "hi" }],
       maxTokens: 16384,
       stream: false,

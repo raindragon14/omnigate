@@ -111,6 +111,8 @@ export function parseProviderRegistry(rawRegistry: unknown): ProviderRegistry {
     throw new Error(formatRegistryError(result.error));
   }
 
+  assertAliasProfiles(result.data.aliases, result.data.profiles);
+
   return {
     providers: result.data.providers.map(toProviderCandidate),
     aliases: result.data.aliases,
@@ -203,6 +205,17 @@ function toProviderCandidate(raw: RawProvider): ProviderCandidate {
     rateLimit: toRateLimit(raw.rate_limit),
     cost: toProviderCost(raw.cost),
   };
+}
+
+function assertAliasProfiles(
+  aliases: Record<string, unknown>,
+  profiles: Record<string, unknown> | undefined,
+): void {
+  for (const alias of Object.keys(aliases)) {
+    if (profiles?.[alias] === undefined) {
+      throw new Error(`${REGISTRY_ERROR_PREFIX}: profiles.${alias} missing`);
+    }
+  }
 }
 
 function formatRegistryError(error: z.ZodError): string {

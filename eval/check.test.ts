@@ -35,7 +35,7 @@ describe("eval gates", () => {
   test("fails challenger below the required ratio", () => {
     const baseline = summaryFor("oracle", ["correct", "correct"]);
     const challenger = summaryFor("omnigate", ["correct", "incorrect"]);
-    const profiles = { "omnigate/coding-auto": { categories: ["coding"], minQualityRatio: 0.9 } };
+    const profiles = { "omnigate/code-quality": { categories: ["coding"], minQualityRatio: 0.9 } };
 
     const failures = evaluateGates([baseline, challenger], profiles);
 
@@ -49,7 +49,7 @@ describe("eval gates", () => {
   test("passes challenger at the required ratio", () => {
     const baseline = summaryFor("oracle", ["correct", "correct"]);
     const challenger = summaryFor("omnigate", ["correct", "correct"]);
-    const profiles = { "omnigate/coding-auto": { categories: ["coding"], minQualityRatio: 0.9 } };
+    const profiles = { "omnigate/code-quality": { categories: ["coding"], minQualityRatio: 0.9 } };
 
     expect(evaluateGates([baseline, challenger], profiles)).toEqual([]);
   });
@@ -58,7 +58,7 @@ describe("eval gates", () => {
   test("skips categories without a profile", () => {
     const baseline = summaryFor("oracle", ["correct", "correct"]);
     const challenger = summaryFor("omnigate", ["incorrect", "incorrect"]);
-    const profiles = { "omnigate/coding-auto": { categories: ["writing"], minQualityRatio: 0.9 } };
+    const profiles = { "omnigate/code-quality": { categories: ["writing"], minQualityRatio: 0.9 } };
 
     expect(evaluateGates([baseline, challenger], profiles)).toEqual([]);
   });

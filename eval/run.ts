@@ -13,7 +13,7 @@ import {
 } from "./routers";
 
 const DEFAULT_SEED = 42;
-const DEFAULT_MODEL = "omnigate/auto-fast";
+const DEFAULT_MODEL = "omnigate/auto";
 const DEFAULT_LIVE_URL = "http://localhost:8787";
 const RESULTS_DIR = "results";
 
@@ -41,7 +41,7 @@ Options:
   --answer <text>   Fixed-router answer (default: "I don't know")
   --live-url <url>  Gateway base URL for the omnigate router (default: http://localhost:8787)
   --api-key <key>   Gateway key (default: OMNIGATE_API_KEY env)
-  --model <alias>   Gateway model alias for the omnigate router (default: omnigate/auto-fast)
+  --model <alias>   Gateway model alias for the omnigate router (default: omnigate/auto)
   --save            Write results JSON to eval/results/
   --help            Show this text`;
 

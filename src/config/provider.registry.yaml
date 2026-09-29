@@ -75,28 +75,33 @@ providers:
       source: "public anonymous tier (no billing)"
 
 aliases:
-  omnigate/auto-fast:
-    families: ["chat-fast", "chat-balanced"]
-  omnigate/auto-quality:
-    families: ["chat-quality", "chat-balanced"]
-  omnigate/coding-auto:
-    families: ["chat-quality", "chat-fast"]
-  omnigate/coding-fast:
+  omnigate/auto:
+    families: ["chat-fast", "chat-quality", "chat-balanced"]
+  omnigate/code-fast:
     families: ["chat-fast"]
     weights:
       speed: 5
       quality: 0.5
     tiebreak: speed
+  omnigate/code-quality:
+    families: ["chat-quality", "chat-fast"]
+  omnigate/general-low-cost:
+    families: ["chat-balanced", "chat-fast"]
 
-# Policy contracts per alias (E5). Categories come from GLOSSARY task
+# Policy contracts per alias. Categories come from GLOSSARY task
 # categories; min_quality_ratio is checked offline by `bun run eval:check`
-# against saved eval results — never enforced at request time yet.
+# and used as a static proxy for request-time quality semantics
+# (see src/router/profile-guard.ts). Every alias must have a profile.
 profiles:
-  omnigate/auto-fast:
-    categories: ["knowledge", "chat"]
-  omnigate/auto-quality:
-    categories: ["knowledge", "writing"]
-  omnigate/coding-auto:
+  omnigate/auto:
+    categories: ["knowledge", "coding", "writing", "chat"]
+    min_quality_ratio: 0.85
+  omnigate/code-fast:
     categories: ["coding"]
-  omnigate/coding-fast:
+    min_quality_ratio: 0.75
+  omnigate/code-quality:
     categories: ["coding"]
+    min_quality_ratio: 0.95
+  omnigate/general-low-cost:
+    categories: ["knowledge", "writing", "chat"]
+    min_quality_ratio: 0.85

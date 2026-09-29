@@ -299,7 +299,10 @@ export type AliasConfig = {
   tiebreak?: TiebreakMode | undefined;
 };
 
-/** Policy contract for one public alias (profile). Request-time enforcement is planned; quality gates are checked offline. */
+/** Task categories served by alias profiles (see GLOSSARY task categories). */
+export type TaskCategory = "knowledge" | "coding" | "writing" | "chat";
+
+/** Policy contract for one public alias (profile). Scope is enforced request-time; quality gates are checked offline. */
 export type AliasProfile = {
   /** Task categories this profile serves (see GLOSSARY task categories). */
   categories: string[];
@@ -679,6 +682,8 @@ export type ProviderErrorCategory =
   | "provider_malformed_response"
   | "provider_network_error"
   | "no_provider_available"
+  | "no_provider_meets_quality"
+  | "profile_scope_mismatch"
   | "invalid_request"
   | "internal_server_error";
 

@@ -77,7 +77,7 @@ flowchart TD
     Scorer -->|ranked list| Fallback[Fallback Runner]
     Fallback -->|try 1| ProviderA[Provider A<br/>chat-fast]
     Fallback -.->|on 429/5xx/timeout| ProviderB[Provider B<br/>chat-quality]
-    Fallback -.->|on 429/5xx/timeout| ProviderC[Provider C<br/>coding-fast]
+    Fallback -.->|on 429/5xx/timeout| ProviderC[Provider C<br/>chat-balanced]
     ProviderA -->|SSE stream| Client
     ProviderB -->|SSE stream| Client
     ProviderC -->|SSE stream| Client
@@ -108,7 +108,7 @@ flowchart TD
 | `quality`  | 3× quality, 0.5× speed                      |
 | `survival` | 3× reliability/quota, avoids paid fallbacks |
 
-Alias-level overrides are defined in `src/config/provider.registry.yaml`; see `omnigate/coding-fast` for an example.
+Alias-level overrides are defined in `src/config/provider.registry.yaml`; see `omnigate/code-fast` for an example.
 
 **Fallback** is triggered by 429, 5xx, timeout, network errors, and malformed responses. Routing stops on other 4xx client errors. **Cooldown** uses exponential backoff and is persisted in SQLite.
 
@@ -116,7 +116,7 @@ Alias-level overrides are defined in `src/config/provider.registry.yaml`; see `o
 
 ## Usage (OpenAI SDK)
 
-```typescript
+````typescript
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -126,13 +126,13 @@ const openai = new OpenAI({
 
 // Basic request
 const completion = await openai.chat.completions.create({
-  model: "omnigate/auto-fast",
+  model: "omnigate/auto",
   messages: [{ role: "user", content: "Explain quantum entanglement" }],
 });
 
 // Streaming
 for await (const chunk of await openai.chat.completions.create({
-  model: "omnigate/auto-quality",
+  model: "omnigate/auto",
   messages: [{ role: "user", content: "Write a short story" }],
   stream: true,
 })) {
@@ -141,11 +141,11 @@ for await (const chunk of await openai.chat.completions.create({
 
 // Mode override
 await openai.chat.completions.create({
-  model: "omnigate/coding-fast",
-  messages: [{ role: "user", content: "Refactor this function" }],
+  model: "omnigate/code-fast",
+  messages: [{ role: "user", content: "Refactor this function:\n```ts\nconst x = 1;\n```" }],
   mode: "speed",
 });
-```
+````
 
 **Additional request fields:**
 
@@ -216,15 +216,29 @@ providers:
 
 ```yaml
 aliases:
-  omnigate/auto-fast:
-    families: ["chat-fast", "chat-balanced"]
-  omnigate/coding-fast:
-    families: ["coding-fast"]
+  omnigate/auto:
+    families: ["chat-fast", "chat-quality", "chat-balanced"]
+  omnigate/code-fast:
+    families: ["chat-fast"]
     weights:
       speed: 5
       quality: 0.5
     tiebreak: speed
 ```
+
+**Profile catalog** (scope is enforced request-time; the gateway classifies each request
+as `knowledge` | `coding` | `writing` | `chat` from its messages):
+
+| Alias                       | Serves                         | Quality bar (vs best single-model baseline) | On miss                                          |
+| --------------------------- | ------------------------------ | ------------------------------------------- | ------------------------------------------------ |
+| `omnigate/auto`             | all categories                 | ≥ 85%                                       | best-effort + `quality_bar_missed` log           |
+| `omnigate/code-fast`        | `coding`                       | ≥ 75%                                       | best-effort + `quality_bar_missed` log           |
+| `omnigate/code-quality`     | `coding`                       | ≥ 95%                                       | strict reject (`no_provider_meets_quality`, 400) |
+| `omnigate/general-low-cost` | `knowledge`, `writing`, `chat` | ≥ 85%                                       | best-effort + `quality_bar_missed` log           |
+
+Out-of-scope requests are rejected with `profile_scope_mismatch` (400) naming the detected
+category and suggesting `omnigate/auto`. The bars are provisional pending per-category
+baselines; the offline authority is `bun run eval:check`.
 
 To add a provider, add its `api_key_env` to `.env` and restart the service.
 

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Profile contracts per alias: `omnigate/auto`, `omnigate/code-fast`, `omnigate/code-quality`, `omnigate/general-low-cost` with `categories` + `min_quality_ratio` (provisional 75/85/85/95% of best single-model baseline)
+- Request-time profile guard: heuristic task classification (`knowledge`/`coding`/`writing`/`chat`) with scope enforcement (`profile_scope_mismatch`, 400, `omnigate/auto` hint)
+- Request-time quality semantics: strict reject for `code-quality` (`no_provider_meets_quality`, 400), best-effort + `quality_bar_missed` log for the other profiles
+- Startup validation that every alias has a matching `profiles:` entry
 - Prometheus `GET /metrics` endpoint (authenticated) with per-provider gauges for today's stats
 - Admin API: `GET /v1/stats`, `POST /v1/admin/cooldowns/clear`, `POST /v1/admin/stats/reset`
 - Opt-in chat request/response body logging via `OMNIGATE_LOG_BODIES`
@@ -27,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING**: alias rename `auto-fast`→`auto`, `auto-quality`+`coding-auto`→`code-quality`, `coding-fast`→`code-fast`, plus new `general-low-cost`; old names return 400 `no_provider_available`
 - README restructured with Table of Contents
 - README: added real provider example (Groq Llama 3)
 - README: replaced ASCII flow with Mermaid diagram

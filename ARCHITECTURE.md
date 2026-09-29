@@ -28,20 +28,26 @@ OmniGate is a single-node, OpenAI-compatible proxy that routes chat completion r
    - Extracts model alias, mode, stream flag, reasoning_effort, stream_options
    - Normalizes `developer` roles to `system`
    - Sets defaults (mode: "balanced")
-4. Provider Selector:
+4. Profile guard:
+   - Classifies task category from messages (`task-classifier.ts`)
+   - Rejects out-of-scope requests (`profile_scope_mismatch`, 400, with `omnigate/auto` hint)
+5. Provider Selector:
    - Resolves alias → families from registry
    - Filters providers by: family, enabled, api_key present, not in cooldown, supports required features (tools, JSON, streaming, reasoning)
-5. Provider Scorer:
+6. Provider Scorer:
    - Reads per-provider signals from SQLite (daily_stats)
    - Computes weighted score per routing mode
    - Applies alias-level weight overrides
    - Tiebreaks by priority/speed/quality
-6. Fallback Runner:
+7. Quality proxy (request-time, static):
+   - Compares top candidate `quality_score` to the registry max vs the profile `min_quality_ratio`
+   - Strict profiles (`code-quality`) reject with `no_provider_meets_quality` (400); others log `quality_bar_missed` and continue
+8. Fallback Runner:
    - Iterates ranked providers
    - On 429/5xx/timeout/network error/malformed → try next
    - On other 4xx → stop, return error
    - On success → persist request stats, return response
-7. Response streamed back to client (SSE passthrough)
+9. Response streamed back to client (SSE passthrough)
 ```
 
 ## Core Components
@@ -54,13 +60,15 @@ OmniGate is a single-node, OpenAI-compatible proxy that routes chat completion r
 
 ### 2. Routing Engine (`src/router/`)
 
-| Module                  | Responsibility                                      |
-| ----------------------- | --------------------------------------------------- |
-| `provider-selector.ts`  | Alias→family resolution, eligibility filtering      |
-| `provider-scorer.ts`    | Signal normalization, weighted scoring, tiebreaking |
-| `fallback-runner.ts`    | Sequential provider trial with retry policy         |
-| `provider-cooldown.ts`  | In-memory exponential backoff per provider          |
-| `request-normalizer.ts` | Zod validation, defaults, mode parsing              |
+| Module                  | Responsibility                                       |
+| ----------------------- | ---------------------------------------------------- |
+| `task-classifier.ts`    | Heuristic task-category classification from messages |
+| `profile-guard.ts`      | Alias scope enforcement + quality-bar proxy          |
+| `provider-selector.ts`  | Alias→family resolution, eligibility filtering       |
+| `provider-scorer.ts`    | Signal normalization, weighted scoring, tiebreaking  |
+| `fallback-runner.ts`    | Sequential provider trial with retry policy          |
+| `provider-cooldown.ts`  | In-memory exponential backoff per provider           |
+| `request-normalizer.ts` | Zod validation, defaults, mode parsing               |
 
 **Scoring formula:**
 
@@ -195,19 +203,22 @@ sequenceDiagram
 
 ## Failure Modes
 
-| Scenario                             | Behavior                                   |
-| ------------------------------------ | ------------------------------------------ |
-| All providers in cooldown            | Returns 503 with retry-after               |
-| No eligible providers for alias      | Returns 404                                |
-| Upstream returns non-streaming error | Fallback to next provider                  |
-| SQLite unavailable                   | Startup fails fast (no silent degradation) |
-| Invalid registry YAML                | Startup fails with Zod validation error    |
+| Scenario                             | Behavior                                                       |
+| ------------------------------------ | -------------------------------------------------------------- |
+| All providers in cooldown            | Returns 400 `no_provider_available` (no 503 today)             |
+| No eligible providers for alias      | Returns 400 `no_provider_available` (unknown alias included)   |
+| Out-of-scope category for alias      | Returns 400 `profile_scope_mismatch` with `omnigate/auto` hint |
+| Strict profile below its quality bar | Returns 400 `no_provider_meets_quality` (`code-quality` only)  |
+| Upstream returns non-streaming error | Fallback to next provider                                      |
+| SQLite unavailable                   | Startup fails fast (no silent degradation)                     |
+| Invalid registry YAML                | Startup fails with Zod validation error                        |
 
 ## Known Technical Debt
 
 Verified during the Fase 0–1 hardening pass; listed here instead of refactored, in priority order:
 
 - **Prettier baseline is dirty** — ~18 untouched files reformat under repo-wide `prettier --write`. Format only touched files until a dedicated baseline commit. `docker-compose.yml` is guarded via `.prettierignore` (prettier mangles its healthcheck quoting).
+- **Request-time quality signal is a static proxy** — `top quality_score / registry max` stands in for `task_success` ratios until per-category baselines exist (Arah 2). The offline authority stays `bun run eval:check`.
 - **Admin shares the client API key** — no separate admin key or RBAC. Deferred until multi-operator use; revisit before multi-tenant deployments.
 - **Streaming attempts record no tokens or cost** — usage is unknown mid-passthrough by design (see GLOSSARY §5.3). Undercounts cost for streaming-heavy workloads; accepted until streaming cost proves material.
 - **Cooldown tests must use real timestamps** — `setCooldown` prunes against `Date.now()`, so fake-clock fixtures are silently dropped. Noted in AGENTS.md.

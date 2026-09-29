@@ -94,7 +94,7 @@ describe("chat completion integration", () => {
         method: "POST",
         headers: AUTH_HEADERS,
         body: JSON.stringify({
-          model: "omnigate/auto-fast",
+          model: "omnigate/auto",
           messages: [{ role: "developer", content: "hi" }],
         }),
       });
@@ -113,7 +113,7 @@ describe("chat completion integration", () => {
       method: "POST",
       headers: AUTH_HEADERS,
       body: JSON.stringify({
-        model: "omnigate/auto-fast",
+        model: "omnigate/auto",
         messages: [{ role: "user", content: "hi" }],
         reasoning_effort: "extreme",
       }),
@@ -129,7 +129,7 @@ describe("chat completion integration", () => {
         method: "POST",
         headers: AUTH_HEADERS,
         body: JSON.stringify({
-          model: "omnigate/auto-fast",
+          model: "omnigate/auto",
           messages: [{ role: "user", content: "hi" }],
         }),
       });
@@ -149,7 +149,7 @@ describe("chat completion integration", () => {
         method: "POST",
         headers: AUTH_HEADERS,
         body: JSON.stringify({
-          model: "omnigate/auto-fast",
+          model: "omnigate/auto",
           messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
         }),
       });
@@ -168,7 +168,7 @@ describe("chat completion integration", () => {
       method: "POST",
       headers: AUTH_HEADERS,
       body: JSON.stringify({
-        model: "omnigate/auto-fast",
+        model: "omnigate/auto",
         messages: [
           {
             role: "user",
@@ -219,7 +219,7 @@ describe("chat completion integration", () => {
               method: "POST",
               headers: AUTH_HEADERS,
               body: JSON.stringify({
-                model: "omnigate/auto-fast",
+                model: "omnigate/auto",
                 messages: [{ role: "user", content: "hi" }],
               }),
             }),
@@ -229,7 +229,7 @@ describe("chat completion integration", () => {
         const requestLines = lines.filter((line) => line.includes('"direction":"request"'));
 
         expect(requestLines).toHaveLength(1);
-        expect(requestLines[0]).toContain("omnigate/auto-fast");
+        expect(requestLines[0]).toContain("omnigate/auto");
       } finally {
         configureChatCompletionLogging(false);
       }
@@ -259,7 +259,7 @@ describe("chat completion integration", () => {
               method: "POST",
               headers: AUTH_HEADERS,
               body: JSON.stringify({
-                model: "omnigate/auto-fast",
+                model: "omnigate/auto",
                 messages: [{ role: "user", content: "hi" }],
                 stream: true,
               }),
@@ -287,7 +287,7 @@ describe("chat completion integration", () => {
             method: "POST",
             headers: AUTH_HEADERS,
             body: JSON.stringify({
-              model: "omnigate/auto-fast",
+              model: "omnigate/auto",
               messages: [{ role: "user", content: "hi" }],
             }),
           });

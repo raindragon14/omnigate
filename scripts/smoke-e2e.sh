@@ -66,7 +66,7 @@ pass "metrics rejects unauthenticated scrape"
 # 3. Live chat returns 200 with a request id (fallback across upstreams).
 CHAT_HEADERS=$(curl -s -D - "${BASE_URL}/v1/chat/completions" \
   -H "${AUTH_HEADER}" -H "Content-Type: application/json" \
-  -d '{"model":"omnigate/auto-fast","messages":[{"role":"user","content":"say hi"}]}' \
+  -d '{"model":"omnigate/auto","messages":[{"role":"user","content":"say hi"}]}' \
   -o /tmp/opencode/smoke-e2e-chat.json)
 echo "${CHAT_HEADERS}" | grep -q "^HTTP/1.1 200" || fail "chat did not return 200"
 REQUEST_ID=$(echo "${CHAT_HEADERS}" | grep -i "^x-request-id:" | tr -d '\r' | awk '{print $2}')
